@@ -1,2 +1,5 @@
 neon_DO_evaluation/neonDO.csv
 .Rhistory
+*.csv
+/gassyPants
+/coupled_CO2-O2_toy_model
