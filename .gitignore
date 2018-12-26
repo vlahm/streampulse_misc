@@ -3,3 +3,4 @@ neon_DO_evaluation/neonDO.csv
 *.csv
 /gassyPants
 /coupled_CO2-O2_toy_model
+*.png
