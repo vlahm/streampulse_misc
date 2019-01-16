@@ -47,7 +47,8 @@ getCoverageIndex = function(arr, maxDailySamp){
     out[out < (m * 3) & out >= (m * 2)] = .5
     out[out < (m * 2) & out >= (m * 1)] = .25
     out[out < (m * 1) & out >= 1.1] = 0
-    # out[! is.na(out)] = 1
+
+    #artificially make sure all colors are present (for correct plotting)
     if(all(out != 1)) out[which(out == 0)[1]] = 1
     if(all(out != .75)) out[which(out == 0)[1]] = .75
     if(all(out != .5)) out[which(out == 0)[1]] = .5
