@@ -147,22 +147,30 @@ beanplot(hy_num, horizontal=TRUE, col='gray', xaxt='n',
 #     labels=month.abb)
 mtext('All sites', 2)
 mtext('Historic Annual Coverage', 3)
+legend('topright', legend=paste('n =', length(! is.na(hy_num))),
+    bty='n', cex=1.3, text.font=2)
 
 #plot temporal coverage by site
 lims = c(min(hy_num), max(hy_num))
 beanplot(concrete_num, horizontal=TRUE, col='yellow', xaxt='n',
     frame.plot=FALSE, ylim=lims)
 mtext('Concrete', 2)
+legend('topright', legend=paste('n =', length(! is.na(concrete_num))),
+    bty='n', cex=1.3, text.font=2)
 
 beanplot(blackwood_num, horizontal=TRUE, col='green', xaxt='n',
     frame.plot=FALSE, ylim=lims)
 # legend('left', legend=c('Concrete', 'Blackwood', 'Wood Bridge'),
 #     fill=c('yellow', 'green', 'orange'), cex=2, bty='n')
 mtext('Blackwood', 2)
+legend('topright', legend=paste('n =', length(! is.na(blackwood_num))),
+    bty='n', cex=1.3, text.font=2)
 
 beanplot(wb_num, horizontal=TRUE, col='orange', xaxt='n',
     frame.plot=FALSE, ylim=lims)
 mtext('Wood Bridge', 2)
+legend('topright', legend=paste('n =', length(! is.na(wb_num))),
+    bty='n', cex=1.3, text.font=2)
 
 # ax_dt = as.numeric(historic_dates)
 # ax_seq = seq(ax_dt[1], ax_dt[which.max(ax_dt)], length.out=10)
@@ -182,12 +190,16 @@ png(width=7, height=6, units='in', type='cairo', res=300,
 par(mfrow=c(2,2), mar=c(0, 0, 0, 0), oma=rep(4, 4))
 qqnorm(gpp_17_18, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
 abline(1, 1, col='red', lty=2)
+legend('bottom', legend='GPP 2017-18', bty='n', cex=1.3)
 qqnorm(er_17_18, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
 abline(1, 1, col='red', lty=2)
+legend('bottom', legend='ER 2017-18', bty='n', cex=1.3)
 qqnorm(gpp_68_70, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
 abline(1, 1, col='red', lty=2)
+legend('top', legend='GPP 1968-70', bty='n', cex=1.3)
 qqnorm(er_68_70, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
 abline(1, 1, col='red', lty=2)
+legend('top', legend='ER 1968-70', bty='n', cex=1.3)
 mtext('Theoretical Quantiles', 1, outer=TRUE, line=1.5)
 mtext('Sample Quantiles', 2, outer=TRUE, line=1.5)
 mtext('Normal Q-Q Plots (red line = 1:1)', 3, outer=TRUE, line=1.5)
@@ -258,3 +270,101 @@ for(i in 1:nsamp){
 
 #p-val is proportion of times observed t-statistic >= bootstrap t-statistic
 pval_er = (sum(t_vect_er >= t_obs_er) + 1) / (nsamp + 1)
+
+#visualize GPP hypothesis test
+
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/bootsrtap_welch_t.png')
+
+par(mfrow=c(2,1), mar=c(4,4,1,2), oma=c(0,0,3,0))
+
+plot(density(t_vect_gpp), xlab='t-value', main='')
+qs = quantile(t_vect_gpp, probs=c(0.025, 0.975))
+dd = density(t_vect_gpp)
+ddo = order(dd$x)
+xdens = dd$x[ddo]
+ydens = dd$y[ddo]
+xdens_lt = xdens[xdens <= qs[1]]
+ydens_lt = ydens[xdens <= qs[1]]
+polygon(c(xdens_lt, rev(xdens_lt)), c(ydens_lt, rep(0, length(ydens_lt))),
+    col='lightgreen', border='lightgreen')
+xdens_ut = xdens[xdens >= qs[2]]
+ydens_ut = ydens[xdens >= qs[2]]
+polygon(c(xdens_ut, rev(xdens_ut)), c(ydens_ut, rep(0, length(ydens_ut))),
+    col='lightgreen', border='lightgreen')
+abline(v=t_obs_gpp, lty=2, col='red', lwd=2)
+legend('topleft', legend='GPP', bty='n', text.font=2, cex=1)
+legend('topleft', legend=paste('\np =', round(pval_gpp, 3)), bty='n',
+    text.font=1, cex=1)
+
+#visualize ER hypothesis test
+plot(density(t_vect_er), xlim=c(-5, 40), xlab='t-value', main='')
+qs = quantile(t_vect_er, probs=c(0.025, 0.975))
+dd = density(t_vect_er)
+ddo = order(dd$x)
+xdens = dd$x[ddo]
+ydens = dd$y[ddo]
+xdens_lt = xdens[xdens <= qs[1]]
+ydens_lt = ydens[xdens <= qs[1]]
+polygon(c(xdens_lt, rev(xdens_lt)), c(ydens_lt, rep(0, length(ydens_lt))),
+    col='lightgreen', border='lightgreen')
+xdens_ut = xdens[xdens >= qs[2]]
+ydens_ut = ydens[xdens >= qs[2]]
+polygon(c(xdens_ut, rev(xdens_ut)), c(ydens_ut, rep(0, length(ydens_ut))),
+    col='lightgreen', border='lightgreen')
+abline(v=t_obs_er, lty=2, col='red', lwd=2)
+legend('top', legend='ER', bty='n', text.font=2, cex=1)
+legend('top', legend=paste('\np =', round(pval_er, 3)), bty='n',
+    text.font=1, cex=1)
+
+mtext("Observed Welch's t-values (red) relative to bootstrapped null dists", 3,
+    outer=TRUE, line=1, font=2, cex=1.3)
+
+dev.off()
+
+#verify with Mann-Whitney-Wilcoxon Test? ####
+
+#visualize dists again with non-bootstrapped means ####
+
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/means_raw_boxplot.png')
+
+gppHmean = paste('mean =', round(mean(gpp_68_70, na.rm=TRUE), 2))
+gppCmean = paste('mean =', round(mean(gpp_17_18, na.rm=TRUE), 2))
+erHmean = paste('mean =', round(mean(er_68_70, na.rm=TRUE), 2) * -1)
+erCmean = paste('mean =', round(mean(er_17_18, na.rm=TRUE), 2))
+boxplot(gpp_68_70, gpp_17_18 * -1, er_68_70, er_17_18,
+    ylab='', col='gray',
+    names=c('GPP 1968-70', 'GPP 2017-18', 'ER 1968-70', 'ER 2017-18'))
+axis(1, at=1:4, labels=c(gppHmean, gppCmean, erHmean, erCmean),
+    line=1.5, col='transparent', tcl=0, font=2)
+mtext(expression(paste("gm"^"-2" * " d"^"-1")), 2, line=2)
+mtext('Another look at distributions, then and now (not bootstrapped)', 3,
+    cex=1, font=2)
+
+dev.off()
+
+#bootstrap some confidence bounds ####
+nsamp = 20000
+mean_vect_er_68_70 = mean_vect_er_17_18 = mean_vect_gpp_68_70 =
+    mean_vect_gpp_17_18 = vector(length=nsamp)
+for(i in 1:nsamp){
+    samp_68_70_er = sample(er_68_70, size=79, replace=TRUE)
+    samp_17_18_er = sample(er_17_18, size=730, replace=TRUE)
+    samp_68_70_gpp = sample(gpp_68_70, size=79, replace=TRUE)
+    samp_17_18_gpp = sample(gpp_17_18, size=730, replace=TRUE)
+    mean_vect_er_68_70[i] = mean(samp_68_70_er, na.rm=TRUE)
+    mean_vect_er_17_18[i] = mean(samp_17_18_er, na.rm=TRUE)
+    mean_vect_gpp_68_70[i] = mean(samp_68_70_gpp, na.rm=TRUE)
+    mean_vect_gpp_17_18[i] = mean(samp_17_18_gpp, na.rm=TRUE)
+}
+
+# plot(density(mean_vect_er_68_70 * -1))
+CI = data.frame('CI95_lower'=numeric(4), 'median'=numeric(4),
+    'CI95_upper'=numeric(4),
+    row.names=c('GPP_then', 'GPP_now', 'ER_then', 'ER_now'))
+CI[1,] = quantile(sort(mean_vect_gpp_68_70), probs=c(0.025, 0.5, 0.975))
+CI[2,] = quantile(sort(mean_vect_gpp_17_18), probs=c(0.025, 0.5, 0.975))
+CI[3,] = quantile(sort(mean_vect_er_68_70) * -1, probs=c(0.025, 0.5, 0.975))
+CI[4,] = quantile(sort(mean_vect_er_17_18), probs=c(0.025, 0.5, 0.975))
+write.csv(CI, '~/Dropbox/streampulse/figs/NHC_comparison/metab_CIs.csv')
