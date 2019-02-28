@@ -4,13 +4,16 @@
 
 library(StreamPULSE)
 library(viridis)
+library(ggplot2)
+library(beanplot)
 
-nhc_68_70 = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_table_15.csv')
+nhc_68_70 = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_table_15.csv',
+    colClasses=c('date'='Date'))
 
 #subset historic data by site and year
-# gpp_concrete = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Concrete']
-# gpp_blackwood = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Blackwood']
-# gpp_wb = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Wood Bridge']
+gpp_concrete = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Concrete']
+gpp_blackwood = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Blackwood']
+gpp_wb = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Wood Bridge']
 
 gpp_68_70 = nhc_68_70$GPP_gO2m2d
 gpp_68 = nhc_68_70$GPP_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1968']
@@ -53,18 +56,11 @@ qqnorm(gpp_17); abline(1, 1, col='red', lty=2)
 #nhc_17 is irregular, so can't use arima; only option would be GAM
 
 
-#non-timeseries comparison of distributions then and now ####
+#dist plots ####
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/metab_distributions.png')
 
-# plot(density(gpp_17, na.rm=TRUE), xlim=c(-3, 10), main='', xlab='GPP',
-#     ylim=c(0,1.1))
-# par(new=TRUE)
-# plot(density(gpp_concrete, na.rm=TRUE), xlim=c(-3, 10), main='', xlab='',
-#     ylab='', ylim=c(0,1.1))
-
-# hist(gpp_17, breaks=15, main='2017; n=264', xlab='GPP')
-# hist(gpp_concrete, breaks=15, main='1968-70 (Concrete); n=60', xlab='GPP')
-
-par(mfrow=c(2,2))
+defpar = par(mfrow=c(2,2))
 
 #plot GPP dists, then and now
 plot(density(gpp_68_70, na.rm=TRUE), xlim=c(-3, 10), bty='l', col='sienna3',
@@ -93,7 +89,7 @@ legend('topleft', legend=c('68-70; n=79', '17-18; n=475'),
     col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
 
 #plot ER dists by year
-cols = viridisyy(6)
+cols = viridis(6)
 plot(density(er_68 * -1, na.rm=TRUE), xlim=c(-18, 2), bty='l', col=cols[1],
     main='ER by year', xlab='ER', ylim=c(0,0.7))
 lines(density(er_69 * -1, na.rm=TRUE), col=cols[2])
@@ -103,3 +99,162 @@ lines(density(er_18, na.rm=TRUE), col=cols[5])
 legend('topleft',
     legend=c('68; n=18', '69; n=49', '70; n=12', '17; n=264', '18; n=211'),
     col=cols, lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
+
+dev.off()
+
+#plot temporal coverage for historic data ####
+
+historic_dates = nhc_68_70$date[! is.na(nhc_68_70$GPP_gO2m2d)]
+historic_year_agg = as.character(historic_dates)
+substr(historic_year_agg, 1, 4) = '1970'
+historic_year_agg = as.Date(historic_year_agg)
+hy_num = as.numeric(historic_year_agg)
+
+hd_concrete = nhc_68_70$date[! is.na(nhc_68_70$GPP_gO2m2d) &
+        nhc_68_70$site == 'Concrete']
+concrete_year_agg = as.character(hd_concrete)
+substr(concrete_year_agg, 1, 4) = '1970'
+concrete_year_agg = as.Date(concrete_year_agg)
+concrete_num = as.numeric(concrete_year_agg)
+
+hd_blackwood = nhc_68_70$date[! is.na(nhc_68_70$GPP_gO2m2d) &
+        nhc_68_70$site == 'Blackwood']
+blackwood_year_agg = as.character(hd_blackwood)
+substr(blackwood_year_agg, 1, 4) = '1970'
+blackwood_year_agg = as.Date(blackwood_year_agg)
+blackwood_num = as.numeric(blackwood_year_agg)
+
+hd_wb = nhc_68_70$date[! is.na(nhc_68_70$GPP_gO2m2d) &
+        nhc_68_70$site == 'Wood Bridge']
+wb_year_agg = as.character(hd_wb)
+substr(wb_year_agg, 1, 4) = '1970'
+wb_year_agg = as.Date(wb_year_agg)
+wb_num = as.numeric(wb_year_agg)
+
+# plot(historic_dates, rep(1, length(historic_dates), type='n', xlab='day'),
+#     yaxt='n', ylab='', xlab='', main='Historic Coverage')
+# abline(v=historic_dates, lty=2, col='gray')
+
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/historic_coverage.png')
+
+par(mfrow=c(4,1), mar=c(0,0,0,0), oma=c(3,4,3,0))
+
+beanplot(hy_num, horizontal=TRUE, col='gray', xaxt='n',
+    frame.plot=FALSE, ylim=lims)
+    # main='Historic Annual Coverage Across Sites')
+# axis(1, at=seq(as.Date('1970-01-01'), as.Date('1970-12-31'), length.out=13)[1:12],
+#     labels=month.abb)
+mtext('All sites', 2)
+mtext('Historic Annual Coverage', 3)
+
+#plot temporal coverage by site
+lims = c(min(hy_num), max(hy_num))
+beanplot(concrete_num, horizontal=TRUE, col='yellow', xaxt='n',
+    frame.plot=FALSE, ylim=lims)
+mtext('Concrete', 2)
+
+beanplot(blackwood_num, horizontal=TRUE, col='green', xaxt='n',
+    frame.plot=FALSE, ylim=lims)
+# legend('left', legend=c('Concrete', 'Blackwood', 'Wood Bridge'),
+#     fill=c('yellow', 'green', 'orange'), cex=2, bty='n')
+mtext('Blackwood', 2)
+
+beanplot(wb_num, horizontal=TRUE, col='orange', xaxt='n',
+    frame.plot=FALSE, ylim=lims)
+mtext('Wood Bridge', 2)
+
+# ax_dt = as.numeric(historic_dates)
+# ax_seq = seq(ax_dt[1], ax_dt[which.max(ax_dt)], length.out=10)
+# axis(1, at=ax_seq, labels=as.Date(ax_seq), las=1, cex.axis=1.7)
+axis(1, at=seq(as.Date('1970-01-01'), as.Date('1970-12-31'), length.out=13)[1:12],
+    labels=month.abb)
+# mtext(text='Historic Annual Coverage by Site', side=3, outer=TRUE, cex=1.8)
+
+dev.off()
+
+#compare overall distributions then and now ####
+
+#first assess normality
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/normality_assessment.png')
+
+par(mfrow=c(2,2), mar=c(0, 0, 0, 0), oma=rep(4, 4))
+qqnorm(gpp_17_18, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
+abline(1, 1, col='red', lty=2)
+qqnorm(er_17_18, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
+abline(1, 1, col='red', lty=2)
+qqnorm(gpp_68_70, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
+abline(1, 1, col='red', lty=2)
+qqnorm(er_68_70, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
+abline(1, 1, col='red', lty=2)
+mtext('Theoretical Quantiles', 1, outer=TRUE, line=1.5)
+mtext('Sample Quantiles', 2, outer=TRUE, line=1.5)
+mtext('Normal Q-Q Plots (red line = 1:1)', 3, outer=TRUE, line=1.5)
+
+dev.off()
+
+#nonnormal, but CLT probably applies.
+#let's assess equality of variance with an F-test
+var.test(gpp_68_70, gpp_17_18) #not equal: p < 0.001
+var.test(er_68_70, er_17_18) #not equal: p < 0.001
+
+#unequal variance, so 2-sample t-test is out.
+#not i.i.d., so welch's t-test is out
+#can't do Mann-Whitney-Wilcoxon Test either because of unequal var and autocorr
+
+#bootstrap 2-samp t-test for GPP (and we'll go with Welch's) ####
+
+#get observed t-statistic
+t_obs_gpp = t.test(gpp_68_70, gpp_17_18, var.equal=FALSE)$statistic
+
+#artificially make both sample means identical (satisfy the null)
+gpp_68_70_mod = gpp_68_70 - mean(gpp_68_70, na.rm=TRUE) +
+    mean(c(gpp_68_70, gpp_17_18), na.rm=TRUE)
+gpp_17_18_mod = gpp_17_18 - mean(gpp_17_18, na.rm=TRUE) +
+    mean(c(gpp_68_70, gpp_17_18), na.rm=TRUE)
+
+#verify
+mean(gpp_68_70_mod, na.rm=TRUE) == mean(gpp_17_18_mod, na.rm=TRUE)
+
+#get bootstrap estimate of sampling distribution of the t-stat if H0 is true;
+#i.e. bootstrap the null distribution
+nsamp = 20000
+t_vect_gpp = vector(length=nsamp)
+for(i in 1:nsamp){
+    samp_68_70_gpp = sample(gpp_68_70_mod, size=79, replace=TRUE)
+    samp_17_18_gpp = sample(gpp_17_18_mod, size=730, replace=TRUE)
+    t_vect_gpp[i] = t.test(samp_68_70_gpp, samp_17_18_gpp,
+        var.equal=FALSE)$statistic
+}
+
+#p-val is proportion of times observed t-statistic >= bootstrap t-statistic
+pval_gpp = (sum(t_vect_gpp <= t_obs_gpp) + 1) / (nsamp + 1)
+
+#bootstrap Welch's t-test for ER ####
+
+#get observed t-statistic
+t_obs_er = t.test(er_68_70, er_17_18, var.equal=FALSE)$statistic
+
+#artificially make both sample means identical (satisfy the null)
+er_68_70_mod = er_68_70 - mean(er_68_70, na.rm=TRUE) +
+    mean(c(er_68_70, er_17_18), na.rm=TRUE)
+er_17_18_mod = er_17_18 - mean(er_17_18, na.rm=TRUE) +
+    mean(c(er_68_70, er_17_18), na.rm=TRUE)
+
+#verify
+mean(er_68_70_mod, na.rm=TRUE) == mean(er_17_18_mod, na.rm=TRUE)
+
+#get bootstrap estimate of sampling distribution of the t-stat if H0 is true;
+#i.e. bootstrap the null distribution
+nsamp = 20000
+t_vect_er = vector(length=nsamp)
+for(i in 1:nsamp){
+    samp_68_70_er = sample(er_68_70_mod, size=79, replace=TRUE)
+    samp_17_18_er = sample(er_17_18_mod, size=730, replace=TRUE)
+    t_vect_er[i] = t.test(samp_68_70_er, samp_17_18_er,
+        var.equal=FALSE)$statistic
+}
+
+#p-val is proportion of times observed t-statistic >= bootstrap t-statistic
+pval_er = (sum(t_vect_er >= t_obs_er) + 1) / (nsamp + 1)
