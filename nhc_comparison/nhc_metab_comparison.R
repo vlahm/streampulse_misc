@@ -69,6 +69,13 @@ lines(density(gpp_17_18, na.rm=TRUE), col='blue')
 legend('topright', legend=c('68-70; n=79', '17-18; n=475'),
     col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
 
+#plot ER dists, then and now
+plot(density(er_68_70 * -1, na.rm=TRUE), xlim=c(-15, 1), bty='l', col='sienna3',
+    main='ER 1968-70 vs. 2017-18', xlab='ER', ylim=c(0,0.7))
+lines(density(er_17_18, na.rm=TRUE), col='blue')
+legend('topleft', legend=c('68-70; n=79', '17-18; n=475'),
+    col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
+
 #plot GPP dists by year
 cols = viridis(5)
 plot(density(gpp_68, na.rm=TRUE), xlim=c(-3, 10), bty='l', col=cols[1],
@@ -80,13 +87,6 @@ lines(density(gpp_18, na.rm=TRUE), col=cols[5])
 legend('topright',
     legend=c('68; n=18', '69; n=49', '70; n=12', '17; n=264', '18; n=211'),
     col=cols, lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
-
-#plot ER dists, then and now
-plot(density(er_17_18, na.rm=TRUE), xlim=c(-15, 1), bty='l', col='sienna3',
-    main='ER 1968-70 vs. 2017-18', xlab='ER', ylim=c(0,0.7))
-lines(density(er_68_70 * -1, na.rm=TRUE), col='blue')
-legend('topleft', legend=c('68-70; n=79', '17-18; n=475'),
-    col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
 
 #plot ER dists by year
 cols = viridis(6)
