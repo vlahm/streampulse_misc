@@ -6,9 +6,17 @@ library(StreamPULSE)
 library(viridis)
 library(ggplot2)
 library(beanplot)
+library(dplyr)
+library(scales)
 
+#setup ####
+#read in historic data and average across multiple same-site, same-day estimates
 nhc_68_70 = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_table_15.csv',
     colClasses=c('date'='Date'))
+nhc_68_70 = nhc_68_70 %>%
+    group_by(date, site) %>%
+    summarize_if(is.numeric, mean, na.rm=TRUE) %>%
+    as.data.frame()
 
 #subset historic data by site and year
 gpp_concrete = nhc_68_70$GPP_gO2m2d[nhc_68_70$site == 'Concrete']
@@ -25,16 +33,25 @@ er_68 = nhc_68_70$ER_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1968']
 er_69 = nhc_68_70$ER_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1969']
 er_70 = nhc_68_70$ER_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1970']
 
-#retrieve contemporary data by year
+#retrieve contemporary data by year; get K and O2 data for later
 query_available_results('NC', 'NHC')
 nhc_17 = request_results(sitecode='NC_NHC', '2017')
 nhc_18 = request_results(sitecode='NC_NHC', '2018')
+nhc_17_18_K = nhc_17$model_results$data %>%
+    select(date, DO.mod, DO.sat, temp.water, depth) %>%
+    # bind_rows(nhc_18$model_results$data[,c('date','DO.obs','DO.sat')]) %>%
+    bind_rows(select(nhc_18$model_results$data, date, DO.mod, DO.sat,
+        temp.water, depth)) %>%
+    # group_by(date) %>%
+    # summarize_all(mean) %>%
+    # left_join(nhc_17$model_results$fit$daily[,c('date','K600_daily_mean')]) %>%
+    left_join(select(bind_rows(nhc_17$model_results$fit$daily,
+        nhc_18$model_results$fit$daily), date, K600_daily_mean)) %>%
+    as.data.frame()
 
 nhc_17 = as.data.frame(nhc_17$predictions[,c('date','GPP','ER')])
 nhc_18 = as.data.frame(nhc_18$predictions[,c('date','GPP','ER')])
 
-# gpp_17 = ts(nhc_17$GPP)
-# gpp_18 = ts(nhc_18$GPP)
 gpp_17 = nhc_17$GPP
 gpp_18 = nhc_18$GPP
 gpp_17_18 = c(gpp_17, gpp_18)
@@ -189,16 +206,16 @@ png(width=7, height=6, units='in', type='cairo', res=300,
 
 par(mfrow=c(2,2), mar=c(0, 0, 0, 0), oma=rep(4, 4))
 qqnorm(gpp_17_18, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
-abline(1, 1, col='red', lty=2)
+abline(0, 1, col='red', lty=2)
 legend('bottom', legend='GPP 2017-18', bty='n', cex=1.3)
 qqnorm(er_17_18, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
-abline(1, 1, col='red', lty=2)
+abline(0, 1, col='red', lty=2)
 legend('bottom', legend='ER 2017-18', bty='n', cex=1.3)
 qqnorm(gpp_68_70, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
-abline(1, 1, col='red', lty=2)
+abline(0, 1, col='red', lty=2)
 legend('top', legend='GPP 1968-70', bty='n', cex=1.3)
 qqnorm(er_68_70, lty=2, xlab='', ylab='', main='', xaxt='n', yaxt='n', bty='o')
-abline(1, 1, col='red', lty=2)
+abline(0, 1, col='red', lty=2)
 legend('top', legend='ER 1968-70', bty='n', cex=1.3)
 mtext('Theoretical Quantiles', 1, outer=TRUE, line=1.5)
 mtext('Sample Quantiles', 2, outer=TRUE, line=1.5)
@@ -368,3 +385,56 @@ CI[2,] = quantile(sort(mean_vect_gpp_17_18), probs=c(0.025, 0.5, 0.975))
 CI[3,] = quantile(sort(mean_vect_er_68_70) * -1, probs=c(0.025, 0.5, 0.975))
 CI[4,] = quantile(sort(mean_vect_er_17_18), probs=c(0.025, 0.5, 0.975))
 write.csv(CI, '~/Dropbox/streampulse/figs/NHC_comparison/metab_CIs.csv')
+
+#evaluate DO and K now vs. then ####
+nhc_68_70_D = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_D.csv',
+    colClasses=c('date'='Date'))
+nhc_68_70_D$D_daily = nhc_68_70_D$D * 24
+
+#convert K600 to K2
+SA = 1568
+SB = -86.04
+SC = 2.142
+SD = -0.0216
+SE = -0.5
+TT = nhc_17_18_K$temp.water
+nhc_17_18_K$K2 = nhc_17_18_K$K600_daily_mean *
+    ((SA + SB * TT + SC * TT ^ 2 + SD * TT ^ 3) / 600) ^ SE
+
+#convert K2 to D
+nhc_17_18_K$D = nhc_17_18_K$K2 * (nhc_17_18_K$DO.sat - nhc_17_18_K$DO.mod)
+D_daily = tapply(nhc_17_18_K$D, nhc_17_18_K$date, mean, na.rm=TRUE)
+
+#plot distributions of historic and modern D
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/D_dists.png')
+
+xlims = range(c(D_daily, nhc_68_70_D$D_daily), na.rm=TRUE)
+plot(density(D_daily, na.rm=TRUE), xlim=xlims, bty='l',
+    col='sienna3', main='D (inst. GE rate) 1968-70 vs. 2017-18',
+    xlab=expression(paste("gm"^"-3" * " d"^"-1")))
+lines(density(nhc_68_70_D$D_daily, na.rm=TRUE, adjust=0.25), col='blue')
+legend('top', legend=c('68-70; n=9', '17-18; n=730'),
+    col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
+
+dev.off()
+
+#compare K by depth
+K2_by_depth = tapply(nhc_17_18_K$K2, round(nhc_17_18_K$depth, 3), mean, na.rm=TRUE)
+nhc_68_70_K = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_K_est.csv')
+K2_sub = K2_by_depth[names(K2_by_depth) %in% as.character(nhc_68_70_K$depth)]
+still_need = nhc_68_70_K$depth[! as.character(nhc_68_70_K$depth) %in% names(K2_sub)]
+sort(unique(substr(names(K2_by_depth), 1, 5)))
+K2_sub = c(K2_by_depth[names(K2_by_depth) == '0.413'], K2_sub)
+
+png(width=7, height=6, units='in', type='cairo', res=300,
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/D_by_depth.png')
+
+cexes = rescale(as.numeric(names(K2_sub)), to=c(1,2))
+plot(nhc_68_70_K$K2[as.numeric(nhc_68_70_K$depth) >= 0.4], K2_sub,
+    xlab='K2 (historic, estimated)', ylab='K2 (modern)',
+    main='K2 paired by depth', cex=cexes, xlim=c(0,1), ylim=c(0, 4))
+abline(0, 1, lty=2, col='gray30')
+legend('topright', legend=c('0.40 m', '0.65 m'), pt.cex=range(cexes), pch=1)
+
+dev.off()
