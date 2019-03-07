@@ -387,11 +387,15 @@ CI[4,] = quantile(sort(mean_vect_er_17_18), probs=c(0.025, 0.5, 0.975))
 write.csv(CI, '~/Dropbox/streampulse/figs/NHC_comparison/metab_CIs.csv')
 
 #evaluate DO and K now vs. then ####
-nhc_68_70_D = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_D.csv',
-    colClasses=c('date'='Date'))
-nhc_68_70_D$D_daily = nhc_68_70_D$D * 24
 
-#convert K600 to K2
+#thought this table was expressing D at first, but it's actually k.
+#however, Hall's k is expressed in g O2 m^-3 d^-1, and our K2 is 1/day
+#our D is in g O2 m^-3 d^-1, so let's use that
+nhc_68_70_k = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_D.csv',
+    colClasses=c('date'='Date'))
+nhc_68_70_k$k_daily = nhc_68_70_k$D * 24 #not D; k
+
+#convert modern K600 to K2 (still 1/day)
 SA = 1568
 SB = -86.04
 SC = 2.142
@@ -404,16 +408,18 @@ nhc_17_18_K$K2 = nhc_17_18_K$K600_daily_mean *
 #convert K2 to D
 nhc_17_18_K$D = nhc_17_18_K$K2 * (nhc_17_18_K$DO.sat - nhc_17_18_K$DO.mod)
 D_daily = tapply(nhc_17_18_K$D, nhc_17_18_K$date, mean, na.rm=TRUE)
+# K2_daily = tapply(nhc_17_18_K$K2, nhc_17_18_K$date, mean, na.rm=TRUE)
 
-#plot distributions of historic and modern D
+#plot distributions of historic k and modern D (assuming they are the same thing)
 png(width=7, height=6, units='in', type='cairo', res=300,
     filename='~/Dropbox/streampulse/figs/NHC_comparison/D_dists.png')
 
-xlims = range(c(D_daily, nhc_68_70_D$D_daily), na.rm=TRUE)
+xlims = range(c(D_daily, nhc_68_70_k$k_daily), na.rm=TRUE)
 plot(density(D_daily, na.rm=TRUE), xlim=xlims, bty='l',
-    col='sienna3', main='D (inst. GE rate) 1968-70 vs. 2017-18',
-    xlab=expression(paste("gm"^"-3" * " d"^"-1")))
-lines(density(nhc_68_70_D$D_daily, na.rm=TRUE, adjust=0.25), col='blue')
+    col='sienna3',
+    main='k (diffusion const.) 1968-70 vs. D (inst. GE rate) 2017-18',
+    xlab=expression(paste("g " * O[2] * " m"^"-3" * " d"^"-1")))
+lines(density(nhc_68_70_k$k_daily, na.rm=TRUE, adjust=0.25), col='blue')
 legend('top', legend=c('68-70; n=9', '17-18; n=730'),
     col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
 
@@ -428,13 +434,18 @@ sort(unique(substr(names(K2_by_depth), 1, 5)))
 K2_sub = c(K2_by_depth[names(K2_by_depth) == '0.413'], K2_sub)
 
 png(width=7, height=6, units='in', type='cairo', res=300,
-    filename='~/Dropbox/streampulse/figs/NHC_comparison/D_by_depth.png')
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/K2_by_depth.png')
 
 cexes = rescale(as.numeric(names(K2_sub)), to=c(1,2))
 plot(nhc_68_70_K$K2[as.numeric(nhc_68_70_K$depth) >= 0.4], K2_sub,
-    xlab='K2 (historic, estimated)', ylab='K2 (modern)',
-    main='K2 paired by depth', cex=cexes, xlim=c(0,1), ylim=c(0, 4))
+    xlab='K2 (1/day; historic, estimated analytically)',
+    ylab='K2 (1/day; modern, modeled)',
+    main='K2 paired by depth (seq 0.4 - 0.65m by 0.05)',
+    cex=cexes, xlim=c(0,1), ylim=c(0, 4))
 abline(0, 1, lty=2, col='gray30')
-legend('topright', legend=c('0.40 m', '0.65 m'), pt.cex=range(cexes), pch=1)
+legend('topright', legend=c('0.40 m', '0.65 m', ''), pt.cex=range(cexes), pch=1,
+    col=c('black', 'black', 'transparent'))
+legend('topright', legend=c('', '', '1:1'), lty=2, col=c('transparent', 'transparent',
+    'gray30'), bg='transparent', bty='n')
 
 dev.off()
