@@ -9,10 +9,11 @@ library(beanplot)
 library(dplyr)
 library(scales)
 
+setwd('~/git/streampulse/other_projects/nhc_comparison')
+
 #setup ####
 #read in historic data and average across multiple same-site, same-day estimates
-nhc_68_70 = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_table_15.csv',
-    colClasses=c('date'='Date'))
+nhc_68_70 = read.csv('hall_table_15.csv', colClasses=c('date'='Date'))
 nhc_68_70 = nhc_68_70 %>%
     group_by(date, site) %>%
     summarize_if(is.numeric, mean, na.rm=TRUE) %>%
@@ -386,16 +387,20 @@ CI[3,] = quantile(sort(mean_vect_er_68_70) * -1, probs=c(0.025, 0.5, 0.975))
 CI[4,] = quantile(sort(mean_vect_er_17_18), probs=c(0.025, 0.5, 0.975))
 write.csv(CI, '~/Dropbox/streampulse/figs/NHC_comparison/metab_CIs.csv')
 
-#evaluate DO and K now vs. then ####
+#evaluate k now vs. then ####
 
-#thought this table was expressing D at first, but it's actually k.
-#however, Hall's k is expressed in g O2 m^-3 d^-1, and our K2 is 1/day
-#our D is in g O2 m^-3 d^-1, so let's use that
-nhc_68_70_k = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_D.csv',
-    colClasses=c('date'='Date'))
-nhc_68_70_k$k_daily = nhc_68_70_k$D * 24 #not D; k
+#read in hall's diffusion constant tables (attained via 3 different means)
+k_diurnal = read.csv('hall_k_diurnalO2_unused.csv', colClasses=c('date'='Date'))
+k_diurnal$method = 'diurnal'
+k_morphology = read.csv('hall_k_morphology.csv')
+k_morphology$method = 'morphology'
+k_dome = read.csv('hall_k_dome.csv', colClasses=c('date'='Date'))
+k_dome$method = 'dome'
+nhc_68_70_k = bind_rows(k_diurnal, k_morphology, k_dome)
 
-#convert modern K600 to K2 (still 1/day)
+nhc_68_70_k$k_daily = nhc_68_70_k$k * 24
+
+#convert modern K600 to K2 (1/day)
 SA = 1568
 SB = -86.04
 SC = 2.142
@@ -405,43 +410,74 @@ TT = nhc_17_18_K$temp.water
 nhc_17_18_K$K2 = nhc_17_18_K$K600_daily_mean *
     ((SA + SB * TT + SC * TT ^ 2 + SD * TT ^ 3) / 600) ^ SE
 
-#convert K2 to D
-nhc_17_18_K$D = nhc_17_18_K$K2 * (nhc_17_18_K$DO.sat - nhc_17_18_K$DO.mod)
-D_daily = tapply(nhc_17_18_K$D, nhc_17_18_K$date, mean, na.rm=TRUE)
-# K2_daily = tapply(nhc_17_18_K$K2, nhc_17_18_K$date, mean, na.rm=TRUE)
+# #convert K2 to D
+# nhc_17_18_K$D = nhc_17_18_K$K2 * (nhc_17_18_K$DO.sat - nhc_17_18_K$DO.mod)
+# D_daily = tapply(nhc_17_18_K$D, nhc_17_18_K$date, mean, na.rm=TRUE)
+# # K2_daily = tapply(nhc_17_18_K$K2, nhc_17_18_K$date, mean, na.rm=TRUE)
 
-#plot distributions of historic k and modern D (assuming they are the same thing)
+
+#calculate 100% saturation deficit expressed as g m-3 (same as mg/L)
+#S = saturation deficit = 100 - % saturation of stream
+#can be expressed in terms of % or concentration
+#but what is "100% saturation deficit"? is that when the stream has 0 O2?
+#in that case, 100% saturation deficit = 100, or expressed as conc, = DO sat
+#moving on...
+
+#convert 15m K2 (sm parlance; would be k2 in hall parlance) to daily k (a la hall)
+nhc_17_18_K$k = nhc_17_18_K$K2 * 2.3 * nhc_17_18_K$DO.sat #eq 9 in hall
+k_daily = tapply(nhc_17_18_K$k, nhc_17_18_K$date, mean, na.rm=TRUE)
+
+#plot distributions of historic and modern k
 png(width=7, height=6, units='in', type='cairo', res=300,
-    filename='~/Dropbox/streampulse/figs/NHC_comparison/D_dists.png')
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/k_dists.png')
 
-xlims = range(c(D_daily, nhc_68_70_k$k_daily), na.rm=TRUE)
-plot(density(D_daily, na.rm=TRUE), xlim=xlims, bty='l',
-    col='sienna3',
-    main='k (diffusion const.) 1968-70 vs. D (inst. GE rate) 2017-18',
-    xlab=expression(paste("g " * O[2] * " m"^"-3" * " d"^"-1")))
-lines(density(nhc_68_70_k$k_daily, na.rm=TRUE, adjust=0.25), col='blue')
-legend('top', legend=c('68-70; n=9', '17-18; n=730'),
-    col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
+xlims = range(c(k_daily, nhc_68_70_k$k_daily), na.rm=TRUE)
+cur_dens = density(k_daily, na.rm=TRUE)
+hist_dens_diurnal = density(nhc_68_70_k$k_daily[nhc_68_70_k$method == 'diurnal'],
+    na.rm=TRUE)
+hist_dens_morph = density(nhc_68_70_k$k_daily[nhc_68_70_k$method == 'morphology'],
+    na.rm=TRUE)
+hist_dens_dome = density(nhc_68_70_k$k_daily[nhc_68_70_k$method == 'dome'],
+    na.rm=TRUE)
+# ylims=range(c(max(hist_dens_diurnal$y), max(hist_dens_morph$y),
+#     max(hist_dens_dome$y)), na.rm=TRUE)
+plot(cur_dens, xlim=xlims, bty='l', col='sienna3',
+    main='k distributions, then vs. now', yaxt='n', ylab='',
+    xlab=expression(paste("gm"^"-3" * " d"^"-1")), lwd=2)
+par(new=TRUE)
+plot(hist_dens_diurnal, col='blue', main='', xlab='', ylab='', yaxt='n',
+    xlim=xlims, bty='l', lwd=2)
+par(new=TRUE)
+plot(hist_dens_morph, col='darkgreen', main='', xlab='', ylab='', yaxt='n',
+    xlim=xlims, bty='l', lwd=2)
+par(new=TRUE)
+plot(hist_dens_dome, col='purple', main='', xlab='', ylab='', yaxt='n',
+    xlim=xlims, bty='l', lwd=2)
+mtext('Density', 2, line=1)
+legend('topright', legend=c('then (diurnal); n=9', 'then (morphology); n=14',
+    'then (dome); n=5', 'now; n=475'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2,
+    col=c('blue','darkgreen','purple','sienna3'))
 
 dev.off()
 
 #compare K by depth
-K2_by_depth = tapply(nhc_17_18_K$K2, round(nhc_17_18_K$depth, 3), mean, na.rm=TRUE)
-nhc_68_70_K = read.csv('~/git/streampulse/other_projects/nhc_comparison/hall_K_est.csv')
-K2_sub = K2_by_depth[names(K2_by_depth) %in% as.character(nhc_68_70_K$depth)]
-still_need = nhc_68_70_K$depth[! as.character(nhc_68_70_K$depth) %in% names(K2_sub)]
-sort(unique(substr(names(K2_by_depth), 1, 5)))
-K2_sub = c(K2_by_depth[names(K2_by_depth) == '0.413'], K2_sub)
+k_by_depth = tapply(nhc_17_18_K$k, round(nhc_17_18_K$depth, 3), mean, na.rm=TRUE)
+k_sub = k_by_depth[names(k_by_depth) %in% as.character(k_morphology$depth)]
+still_need = k_morphology$depth[! as.character(k_morphology$depth) %in% names(k_sub)]
+sort(unique(substr(names(k_by_depth), 1, 5)))
+k_sub = c(k_by_depth[names(k_by_depth) == '0.413'], k_sub)
 
 png(width=7, height=6, units='in', type='cairo', res=300,
-    filename='~/Dropbox/streampulse/figs/NHC_comparison/K2_by_depth.png')
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/k_by_depth.png')
 
-cexes = rescale(as.numeric(names(K2_sub)), to=c(1,2))
-plot(nhc_68_70_K$K2[as.numeric(nhc_68_70_K$depth) >= 0.4], K2_sub,
+#labels haven't been updated here, nor has anything been reconsidered since
+#rethinking the conversions
+cexes = scales::rescale(as.numeric(names(k_sub)), to=c(1,2))
+plot(k_morphology$k[as.numeric(k_morphology$depth) >= 0.4], k_sub,
     xlab='K2 (1/day; historic, estimated analytically)',
     ylab='K2 (1/day; modern, modeled)',
     main='K2 paired by depth (seq 0.4 - 0.65m by 0.05)',
-    cex=cexes, xlim=c(0,1), ylim=c(0, 4))
+    cex=cexes)
 abline(0, 1, lty=2, col='gray30')
 legend('topright', legend=c('0.40 m', '0.65 m', ''), pt.cex=range(cexes), pch=1,
     col=c('black', 'black', 'transparent'))
