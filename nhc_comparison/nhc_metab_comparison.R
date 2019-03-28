@@ -60,6 +60,7 @@ gpp_17_18 = c(gpp_17, gpp_18)
 er_17 = nhc_17$ER
 er_18 = nhc_18$ER
 er_17_18 = c(er_17, er_18)
+dates_17_18 = c(nhc_17$date, nhc_18$date)
 
 #time-series comparison of means then and now? ####
 plot(gpp_17, type='l')
@@ -230,7 +231,7 @@ var.test(gpp_68_70, gpp_17_18) #not equal: p < 0.001
 var.test(er_68_70, er_17_18) #not equal: p < 0.001
 
 #unequal variance, so 2-sample t-test is out.
-#not i.i.d., so welch's t-test is out
+#not i.i.d., so welch's t-test is out (could transform)
 #can't do Mann-Whitney-Wilcoxon Test either because of unequal var and autocorr
 
 #bootstrap 2-samp t-test for GPP (and we'll go with Welch's) ####
@@ -247,13 +248,41 @@ gpp_17_18_mod = gpp_17_18 - mean(gpp_17_18, na.rm=TRUE) +
 #verify
 mean(gpp_68_70_mod, na.rm=TRUE) == mean(gpp_17_18_mod, na.rm=TRUE)
 
+#get historic monthly data coverage to use for sample weights
+month_counts_68_70 = tapply(rep(1, nrow(nhc_68_70)),
+    substr(nhc_68_70$date, 6, 7), sum)
+month_proportions = month_counts_68_70 / sum(month_counts_68_70)
+
+#split gpp vector by month for each dataset
+gpp_68_70_bymo = split(gpp_68_70_mod, factor(substr(nhc_68_70$date, 6, 7)))
+gpp_17_18_bymo = split(gpp_17_18_mod, factor(substr(dates_17_18, 6, 7)))
+gpp_17_18_bymo = lapply(gpp_17_18_bymo, na.omit)
+nsamp_17_18 = sum(sapply(gpp_17_18_bymo, length))
+nsamp_68_70 = length(gpp_68_70_mod)
+
+#determine monthly sample sizes for modern dataset; deal with remainders
+month_samp_17_18 = month_proportions * nsamp_17_18
+extra_sample_probs = month_samp_17_18 %% 1
+month_samp_17_18 = floor(month_samp_17_18)
+
 #get bootstrap estimate of sampling distribution of the t-stat if H0 is true;
-#i.e. bootstrap the null distribution
+#i.e. bootstrap the null distribution (weight draws by historic monthly coverage)
 nsamp = 20000
 t_vect_gpp = vector(length=nsamp)
 for(i in 1:nsamp){
-    samp_68_70_gpp = sample(gpp_68_70_mod, size=79, replace=TRUE)
-    samp_17_18_gpp = sample(gpp_17_18_mod, size=730, replace=TRUE)
+    samp_68_70_gpp = samp_17_18_gpp = c()
+    remainder_months = sample(c(1:8, 10:12), size=sum(extra_sample_probs),
+        prob=extra_sample_probs)
+    for(j in c(1:8, 10:12)){
+        extra_samp = ifelse(j %in% remainder_months, 1, 0)
+        j = sprintf('%02d', j)
+        samp_68_70_gpp = append(samp_68_70_gpp, sample(gpp_68_70_bymo[[j]],
+            size=month_counts_68_70[j], replace=TRUE))
+        samp_17_18_gpp = append(samp_17_18_gpp, sample(gpp_17_18_bymo[[j]],
+            size=month_samp_17_18[j] + extra_samp, replace=TRUE))
+    }
+    # samp_68_70_gpp = sample(gpp_68_70_mod, size=nsamp_68_70, replace=TRUE)
+    # samp_17_18_gpp = sample(gpp_17_18_mod, size=nsamp_17_18, replace=TRUE)
     t_vect_gpp[i] = t.test(samp_68_70_gpp, samp_17_18_gpp,
         var.equal=FALSE)$statistic
 }
@@ -275,13 +304,36 @@ er_17_18_mod = er_17_18 - mean(er_17_18, na.rm=TRUE) +
 #verify
 mean(er_68_70_mod, na.rm=TRUE) == mean(er_17_18_mod, na.rm=TRUE)
 
+#split er vector by month for each dataset
+er_68_70_bymo = split(er_68_70_mod, factor(substr(nhc_68_70$date, 6, 7)))
+er_17_18_bymo = split(er_17_18_mod, factor(substr(dates_17_18, 6, 7)))
+er_17_18_bymo = lapply(er_17_18_bymo, na.omit)
+nsamp_17_18 = sum(sapply(er_17_18_bymo, length))
+nsamp_68_70 = length(er_68_70_mod)
+
+#determine monthly sample sizes for modern dataset; deal with remainders
+month_samp_17_18 = month_proportions * nsamp_17_18
+extra_sample_probs = month_samp_17_18 %% 1
+month_samp_17_18 = floor(month_samp_17_18)
+
 #get bootstrap estimate of sampling distribution of the t-stat if H0 is true;
-#i.e. bootstrap the null distribution
+#i.e. bootstrap the null distribution (weight draws by historic monthly coverage)
 nsamp = 20000
 t_vect_er = vector(length=nsamp)
 for(i in 1:nsamp){
-    samp_68_70_er = sample(er_68_70_mod, size=79, replace=TRUE)
-    samp_17_18_er = sample(er_17_18_mod, size=730, replace=TRUE)
+    samp_68_70_er = samp_17_18_er = c()
+    remainder_months = sample(c(1:8, 10:12), size=sum(extra_sample_probs),
+        prob=extra_sample_probs)
+    for(j in c(1:8, 10:12)){
+        extra_samp = ifelse(j %in% remainder_months, 1, 0)
+        j = sprintf('%02d', j)
+        samp_68_70_er = append(samp_68_70_er, sample(er_68_70_bymo[[j]],
+            size=month_counts_68_70[j], replace=TRUE))
+        samp_17_18_er = append(samp_17_18_er, sample(er_17_18_bymo[[j]],
+            size=month_samp_17_18[j] + extra_samp, replace=TRUE))
+    }
+    # samp_68_70_er = sample(er_68_70_mod, size=nsamp_68_70, replace=TRUE)
+    # samp_17_18_er = sample(er_17_18_mod, size=nsamp_17_18, replace=TRUE)
     t_vect_er[i] = t.test(samp_68_70_er, samp_17_18_er,
         var.equal=FALSE)$statistic
 }
@@ -289,10 +341,10 @@ for(i in 1:nsamp){
 #p-val is proportion of times observed t-statistic >= bootstrap t-statistic
 pval_er = (sum(t_vect_er >= t_obs_er) + 1) / (nsamp + 1)
 
-#visualize GPP hypothesis test
+#visualize GPP hypothesis test ####
 
 png(width=7, height=6, units='in', type='cairo', res=300,
-    filename='~/Dropbox/streampulse/figs/NHC_comparison/bootsrtap_welch_t.png')
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/bootstrap_welch_t_weighted.png')
 
 par(mfrow=c(2,1), mar=c(4,4,1,2), oma=c(0,0,3,0))
 
@@ -315,7 +367,8 @@ legend('topleft', legend='GPP', bty='n', text.font=2, cex=1)
 legend('topleft', legend=paste('\np =', round(pval_gpp, 3)), bty='n',
     text.font=1, cex=1)
 
-#visualize ER hypothesis test
+#visualize ER hypothesis test ####
+
 plot(density(t_vect_er), xlim=c(-5, 40), xlab='t-value', main='')
 qs = quantile(t_vect_er, probs=c(0.025, 0.975))
 dd = density(t_vect_er)
@@ -362,7 +415,7 @@ mtext('Another look at distributions, then and now (not bootstrapped)', 3,
 
 dev.off()
 
-#bootstrap some confidence bounds ####
+#bootstrap some confidence bounds (NEEDS TO BE WEIGHTED) ####
 nsamp = 20000
 mean_vect_er_68_70 = mean_vect_er_17_18 = mean_vect_gpp_68_70 =
     mean_vect_gpp_17_18 = vector(length=nsamp)
