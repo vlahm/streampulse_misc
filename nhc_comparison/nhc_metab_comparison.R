@@ -254,11 +254,19 @@ month_counts_68_70 = tapply(rep(1, nrow(nhc_68_70)),
 month_proportions = month_counts_68_70 / sum(month_counts_68_70)
 
 #split gpp vector by month for each dataset
+#commented portions are for uniformly distributing monthly draw weights
 gpp_68_70_bymo = split(gpp_68_70_mod, factor(substr(nhc_68_70$date, 6, 7)))
+# gpp_68_70_bymo = split(gpp_68_70_mod,
+#     factor(rep(c('01','02','03','04','05','06','07','08','10','11','12'),
+#     length.out=length(gpp_68_70_mod))))
 gpp_17_18_bymo = split(gpp_17_18_mod, factor(substr(dates_17_18, 6, 7)))
+# gpp_17_18_bymo = split(gpp_17_18_mod,
+#     factor(rep(c('01','02','03','04','05','06','07','08','10','11','12'),
+#     length.out=length(gpp_17_18_mod))))
 gpp_17_18_bymo = lapply(gpp_17_18_bymo, na.omit)
 nsamp_17_18 = sum(sapply(gpp_17_18_bymo, length))
 nsamp_68_70 = length(gpp_68_70_mod)
+
 
 #determine monthly sample sizes for modern dataset; deal with remainders
 month_samp_17_18 = month_proportions * nsamp_17_18
@@ -268,6 +276,7 @@ month_samp_17_18 = floor(month_samp_17_18)
 #get bootstrap estimate of sampling distribution of the t-stat if H0 is true;
 #i.e. bootstrap the null distribution (weight draws by historic monthly coverage)
 nsamp = 20000
+
 t_vect_gpp = vector(length=nsamp)
 for(i in 1:nsamp){
     samp_68_70_gpp = samp_17_18_gpp = c()
@@ -366,6 +375,13 @@ abline(v=t_obs_gpp, lty=2, col='red', lwd=2)
 legend('topleft', legend='GPP', bty='n', text.font=2, cex=1)
 legend('topleft', legend=paste('\np =', round(pval_gpp, 3)), bty='n',
     text.font=1, cex=1)
+
+#why bimodality in the null dist?
+#1. not from skewed historic draw weights; artificially uniformified them to test.
+#2. is from skewed modern draw weights; artificially uniformified them to test.
+#3. there is multimodality in some of the modern monthly GPP dists.
+#if most draws come from one GPP peak or another,
+#the t-val may land in one H0 peak or another
 
 #visualize ER hypothesis test ####
 
