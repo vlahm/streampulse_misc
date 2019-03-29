@@ -34,6 +34,11 @@ er_68 = nhc_68_70$ER_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1968']
 er_69 = nhc_68_70$ER_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1969']
 er_70 = nhc_68_70$ER_gO2m2d[substr(nhc_68_70$date, 1, 4) == '1970']
 
+nep_68_70 = gpp_68_70 - er_68_70
+nep_68 = gpp_68 - er_68
+nep_69 = gpp_69 - er_69
+nep_70 = gpp_70 - er_70
+
 #retrieve contemporary data by year; get K and O2 data for later
 query_available_results('NC', 'NHC')
 nhc_17 = request_results(sitecode='NC_NHC', '2017')
@@ -60,6 +65,11 @@ gpp_17_18 = c(gpp_17, gpp_18)
 er_17 = nhc_17$ER
 er_18 = nhc_18$ER
 er_17_18 = c(er_17, er_18)
+
+nep_17 = gpp_17 + er_17
+nep_18 = gpp_18 + er_18
+nep_17_18 = c(nep_17, nep_18)
+
 dates_17_18 = c(nhc_17$date, nhc_18$date)
 
 #time-series comparison of means then and now? ####
@@ -76,10 +86,10 @@ qqnorm(gpp_17); abline(1, 1, col='red', lty=2)
 
 
 #dist plots ####
-png(width=7, height=6, units='in', type='cairo', res=300,
+png(width=9, height=6, units='in', type='cairo', res=300,
     filename='~/Dropbox/streampulse/figs/NHC_comparison/metab_distributions.png')
 
-defpar = par(mfrow=c(2,2))
+defpar = par(mfrow=c(2,3))
 
 #plot GPP dists, then and now
 plot(density(gpp_68_70, na.rm=TRUE), xlim=c(-3, 10), bty='l', col='sienna3',
@@ -92,6 +102,13 @@ legend('topright', legend=c('68-70; n=79', '17-18; n=475'),
 plot(density(er_68_70 * -1, na.rm=TRUE), xlim=c(-15, 1), bty='l', col='sienna3',
     main='ER 1968-70 vs. 2017-18', xlab='ER', ylim=c(0,0.7))
 lines(density(er_17_18, na.rm=TRUE), col='blue')
+legend('topleft', legend=c('68-70; n=79', '17-18; n=475'),
+    col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
+
+#plot NEP dists, then and now
+plot(density(nep_68_70, na.rm=TRUE), xlim=c(-15, 2), bty='l', col='sienna3',
+    main='NEP 1968-70 vs. 2017-18', xlab='NEP', ylim=c(0,1.0))
+lines(density(nep_17_18, na.rm=TRUE), col='blue')
 legend('topleft', legend=c('68-70; n=79', '17-18; n=475'),
     col=c('sienna3','blue'), lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
 
@@ -108,13 +125,25 @@ legend('topright',
     col=cols, lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
 
 #plot ER dists by year
-cols = viridis(6)
+cols = viridis(5)
 plot(density(er_68 * -1, na.rm=TRUE), xlim=c(-18, 2), bty='l', col=cols[1],
     main='ER by year', xlab='ER', ylim=c(0,0.7))
 lines(density(er_69 * -1, na.rm=TRUE), col=cols[2])
 lines(density(er_70 * -1, na.rm=TRUE), col=cols[3])
 lines(density(er_17, na.rm=TRUE), col=cols[4])
 lines(density(er_18, na.rm=TRUE), col=cols[5])
+legend('topleft',
+    legend=c('68; n=18', '69; n=49', '70; n=12', '17; n=264', '18; n=211'),
+    col=cols, lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
+
+#plot NEP dists by year
+cols = viridis(5)
+plot(density(nep_68, na.rm=TRUE), xlim=c(-18, 2), bty='l', col=cols[1],
+    main='NEP by year', xlab='NEP', ylim=c(0,1.1))
+lines(density(nep_69, na.rm=TRUE), col=cols[2])
+lines(density(nep_70, na.rm=TRUE), col=cols[3])
+lines(density(nep_17, na.rm=TRUE), col=cols[4])
+lines(density(nep_18, na.rm=TRUE), col=cols[5])
 legend('topleft',
     legend=c('68; n=18', '69; n=49', '70; n=12', '17; n=264', '18; n=211'),
     col=cols, lty=1, bty='n', seg.len=1, cex=0.9, lwd=2)
