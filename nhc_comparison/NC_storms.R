@@ -27,7 +27,7 @@ unique(eno$flagComment)
 
 #get datetimes associated with those i just flagged.
 #(you could include others, but look at them with the cleaning tool first)
-storm_rows = grep('', eno$flagComment)
+storm_rows = grep('storm', eno$flagComment)
 storm_dt = eno$dateTimeUTC[storm_rows]
 eno = eno[eno$dateTimeUTC %in% storm_dt,]
 
