@@ -10,36 +10,36 @@ sp = sp[sp$regionID == 'NC',]
 sp$regionID = NULL
 
 #grab the Eno subset
-eno = sp[sp$siteID == 'Eno',]
+subset = sp[sp$siteID == 'Eno',]
 
 #remove duplicate rows
-eno = eno[! duplicated(eno),]
+subset = subset[! duplicated(subset),]
 
 #get indices of all points that have been flagged with the word "storm".
 #i just flagged all likely storms for Eno 2017 and NHC 2017
-storm_related_rows = grep('storm', eno$flagComment, ignore.case=TRUE)
+storm_related_rows = grep('storm', subset$flagComment, ignore.case=TRUE)
 
 #filter all but storm-related rows
-eno = eno[storm_related_rows,]
+subset = subset[storm_related_rows,]
 
 #get set of all storm related flag comments
-unique(eno$flagComment)
+unique(subset$flagComment)
 
 #get datetimes associated with those i just flagged.
 #(you could include others, but look at them with the cleaning tool first)
-storm_rows = grep('storm', eno$flagComment)
-storm_dt = eno$dateTimeUTC[storm_rows]
-eno = eno[eno$dateTimeUTC %in% storm_dt,]
+storm_rows = grep('storm', subset$flagComment)
+storm_dt = subset$dateTimeUTC[storm_rows]
+subset = subset[subset$dateTimeUTC %in% storm_dt,]
 
 #average rows with the same siteID, datetime, and variable in preparation for...
-eno = aggregate(value ~ siteID + dateTimeUTC + variable, mean,
-    data=eno, na.action=NULL)
+subset = aggregate(value ~ siteID + dateTimeUTC + variable, mean,
+    data=subset, na.action=NULL)
 
 # converting from long to wide format
-eno = tidyr::spread(eno, variable, value)
+subset = tidyr::spread(subset, variable, value)
 
 #see what you're dealing with
-head(eno)
+head(subset)
 
 #task: think about how to identify and compare pre-post storm data.
 #how should we define the beginning and end of a storm?
