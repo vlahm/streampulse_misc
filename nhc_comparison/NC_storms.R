@@ -12,34 +12,45 @@ sp$regionID = NULL
 #grab the Eno subset
 subset = sp[sp$siteID == 'Eno',]
 
+#remove the main dataset from the global environment if youre low on RAM
+# rm(sp)
+
 #remove duplicate rows
 subset = subset[! duplicated(subset),]
+
+#convert datetime from string to POSIXct
+subset$dateTimeUTC = as.POSIXct(subset$dateTimeUTC, tz='UTC')
 
 #get indices of all points that have been flagged with the word "storm".
 #i just flagged all likely storms for Eno 2017 and NHC 2017
 storm_related_rows = grep('storm', subset$flagComment, ignore.case=TRUE)
 
-#filter all but storm-related rows
-subset = subset[storm_related_rows,]
+#filter all but storm-related rows (jk)
+# subset = subset[storm_related_rows,]
 
 #get set of all storm related flag comments
-unique(subset$flagComment)
+unique(subset$flagComment[storm_related_rows])
 
-#get datetimes associated with those i just flagged.
+#get datetimes associated with those i just flagged (comment == 'storm')
 #(you could include others, but look at them with the cleaning tool first)
-storm_rows = grep('storm', subset$flagComment)
+storm_rows = grepl('storm', subset$flagComment)
 storm_dt = subset$dateTimeUTC[storm_rows]
-subset = subset[subset$dateTimeUTC %in% storm_dt,]
 
-#average rows with the same siteID, datetime, and variable in preparation for...
+#filter all but storm rows (jk)
+# subset = subset[subset$dateTimeUTC %in% storm_dt,]
+
+#average rows with the same siteID, datetime, and variable (for shape format step below)
 subset = aggregate(value ~ siteID + dateTimeUTC + variable, mean,
     data=subset, na.action=NULL)
 
-# converting from long to wide format
-subset = tidyr::spread(subset, variable, value)
+# create boolean column for storm or not storm
+subset$storm = as.numeric(subset$dateTimeUTC %in% storm_dt)
+
+# convert from long to wide format
+stormdata = tidyr::spread(subset, variable, value)
 
 #see what you're dealing with
-head(subset)
+head(stormdata)
 
 #task: think about how to identify and compare pre-post storm data.
 #how should we define the beginning and end of a storm?
