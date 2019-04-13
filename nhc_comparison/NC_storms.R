@@ -1,4 +1,8 @@
 library(tidyr)
+library(dplyr)
+
+#select site of interest
+focus = 'NHC'
 
 #read in full streampulse dataset (not including NEON or Powell)
 sp = read.csv('~/Downloads/all_sp_data.csv', stringsAsFactors=FALSE)
@@ -9,8 +13,8 @@ sp = sp[sp$regionID == 'NC',]
 #get rid of regionID since this is a huge dataset and it's just wasting memory
 sp$regionID = NULL
 
-#grab the Eno subset
-subset = sp[sp$siteID == 'NHC',]
+#grab the NHC subset
+subset = sp[sp$siteID == focus,]
 
 #remove the main dataset from the global environment if youre low on RAM
 rm(sp)
@@ -52,16 +56,40 @@ subset$storm = as.numeric(subset$dateTimeUTC %in% storm_dt)
 # convert from long to wide format
 stormdata = tidyr::spread(subset, variable, value)
 
-#see what you're dealing with
-head(stormdata)
+#bring in metabolism estimates; deal with \\N characters from MySQL
+modres = read.csv('~/Downloads/all_daily_model_results.csv',
+    stringsAsFactors=FALSE)
+modres[modres == '\\N'] = NA
+numind = grepl('(GPP|ER|K600)', colnames(modres))
+modres[,numind] = apply(modres[,numind], 2, as.numeric)
 
-#a useless plot, but it verifies that stuff worked
-plot(stormdata$dateTimeUTC, stormdata$DO_mgL, type='l')
-points(stormdata$dateTimeUTC[stormdata$storm == 1],
-    stormdata$DO_mgL[stormdata$storm == 1], col='red', pch=20, cex=0.1)
+#convert datetime to date (make new column)
+modres$date = as.Date(as.POSIXct(modres$solar_date))
+
+#clean
+modres = filter(modres, site == focus & year != 1907) %>%
+    select(-region, -site, -year, -solar_date)
+
+#average storm data by day and merge with metab estimates
+stormdaily = group_by(stormdata, 'date'=as.Date(substr(dateTimeUTC, 1, 10))) %>%
+    summarize_if(is.numeric, mean, na.rm=TRUE) %>%
+    left_join(modres, by='date') %>%
+    as.data.frame()
+
+#see what you're dealing with
+head(stormdaily)
+
+#plot
+ylims = range(stormdaily$GPP, stormdaily$ER, na.rm=TRUE)
+plot(stormdaily$date, stormdaily$GPP, type='l', col='red', ylim=ylims,
+    xlab='', ylab='g O2 m^-2 d^-1', main='NHC storms, 2017',
+    xlim=c(as.Date('2017-01-01'), as.Date('2017-12-31')))
+lines(stormdaily$date, stormdaily$ER, col='blue')
+abline(v=stormdaily$date[stormdaily$storm > 0], col='gray', lty=2)
 
 #save csv
 write.csv(stormdata, '~/Desktop/NHC_stormdata.csv', row.names=FALSE)
+write.csv(stormdaily, '~/Desktop/NHC_stormdily.csv', row.names=FALSE)
 
 #task: think about how to identify and compare pre-post storm data.
 #how should we define the beginning and end of a storm?
