@@ -89,7 +89,7 @@ abline(v=stormdaily$date[stormdaily$storm > 0], col='gray', lty=2)
 
 #save csv
 write.csv(stormdata, '~/Desktop/NHC_stormdata.csv', row.names=FALSE)
-write.csv(stormdaily, '~/Desktop/NHC_stormdily.csv', row.names=FALSE)
+write.csv(stormdaily, '~/Desktop/NHC_stormdaily.csv', row.names=FALSE)
 
 #task: think about how to identify and compare pre-post storm data.
 #how should we define the beginning and end of a storm?
