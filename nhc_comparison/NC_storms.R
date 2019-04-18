@@ -95,26 +95,67 @@ stormdaily = read.csv('~/Downloads/NHC_stormdaily.csv', stringsAsFactors=FALSE,
     colClasses=c('date'='Date'))
 
 # stormdaily$GPP = any(is.nan(stormdaily$GPP))
-during = as.logical(stormdaily$storm)
-day1pre = lead(during)
-day2pre = lead(during, 2)
-day3pre = lead(during, 3)
-day1post = lag(during)
-day2post = lag(during, 2)
-day3post = lag(during, 3)
-storm_summary = matrix(NA, 5, 7,
-    dimnames=list(c('GPPmn', 'ERmn', 'GPP:ERmn', 'GPPse', 'ERse'),
+stormbool = as.logical(stormdaily$storm)
+
+stormrle = rle(stormbool)
+stormends = cumsum(stormrle$lengths)[c(FALSE, TRUE)]
+stormstarts = stormends - stormrle$lengths[c(FALSE, TRUE)] + 1
+
+stormchunks = mapply(`:`, stormstarts, stormends)
+stormfac = c()
+for(i in 1:length(stormchunks)){
+    chunk = rep(i, times=length(stormchunks[[i]]))
+    stormfac = append(stormfac, chunk)
+}
+
+duringGPP = tapply(stormdaily$GPP[stormbool], stormfac,
+    mean, na.rm=TRUE)
+duringER = tapply(stormdaily$ER[stormbool], stormfac,
+    mean, na.rm=TRUE) * -1
+
+# during = which(stormbool)
+# # stormlengths = rle(diff(during))$lengths[c(TRUE, FALSE)] + 1
+# stormlengths = stormrle$lengths[c(FALSE, TRUE)]
+# rep(stormlengths, times=stormlengths)
+# factor(stormlengths)
+# split
+
+during = which(stormbool)
+day1pre = stormstarts - 1
+day2pre = stormstarts - 2
+day3pre = stormstarts - 3
+day1post = stormends + 1
+day2post = stormends + 2
+day3post = stormends + 3
+
+storm_summary = matrix(NA, 10, 7,
+    dimnames=list(c('GPPmn', 'ERmn', 'GPP:ERmn', 'GPPse', 'ERse',
+        'difGPPmn', 'difERmn', 'difGPP:ERmn', 'difGPPse', 'difERse'),
     c('day3pre', 'day2pre', 'day1pre', 'during', 'day1post', 'day2post', 'day3post')))
+duringratio = mean(duringGPP, na.rm=TRUE) / mean(duringER, na.rm=TRUE)
 for(i in 1:ncol(storm_summary)){
-    gppmn = mean(stormdaily$GPP[get(colnames(storm_summary)[i])], na.rm=TRUE)
-    storm_summary[1, i] = gppmn
-    ermn = mean(stormdaily$ER[get(colnames(storm_summary)[i])], na.rm=TRUE)
-    storm_summary[2, i] = ermn
-    storm_summary[3, i] = gppmn / ermn
-    gppsd = sd(stormdaily$GPP[get(colnames(storm_summary)[i])], na.rm=TRUE)
-    storm_summary[4, i] = gppsd
-    ersd = sd(stormdaily$ER[get(colnames(storm_summary)[i])], na.rm=TRUE)
-    storm_summary[5, i] = ersd
+    day = colnames(storm_summary)[i]
+    gppset = stormdaily$GPP[get(day)]
+    erset = stormdaily$ER[get(day)] * -1
+
+    storm_summary[1, i] = mean(gppset, na.rm=TRUE)
+    storm_summary[2, i] = mean(erset, na.rm=TRUE)
+    storm_summary[3, i] = storm_summary[1, i] / storm_summary[2, i]
+    storm_summary[4, i] = sd(gppset, na.rm=TRUE) / sqrt(length(stormstarts))
+    storm_summary[5, i] = sd(erset, na.rm=TRUE) / sqrt(length(stormstarts))
+
+    if(day != 'during'){
+        gppdif = gppset - duringGPP
+        erdif = erset - duringER
+
+        storm_summary[6, i] = mean(gppdif, na.rm=TRUE)
+        storm_summary[7, i] = mean(erdif, na.rm=TRUE)
+        storm_summary[8, i] = storm_summary[3, i] - duringratio
+        storm_summary[9, i] = sd(gppdif, na.rm=TRUE)
+        storm_summary[10, i] = sd(erdif, na.rm=TRUE)
+    } else {
+        storm_summary[6:10, i] = NA
+    }
 }
 
 error.bars <- function(x, y, upper, lower=upper, cap.length=0.1, horiz=F,...){
@@ -128,12 +169,36 @@ error.bars <- function(x, y, upper, lower=upper, cap.length=0.1, horiz=F,...){
     }
 }
 
-barplot(storm_summary[1:3,], beside=TRUE, ylim=c(-7, 5))
-s1 = seq(1.5, 3.5, 1)
-# s2 = seq(4, 22, 3)
-xv = c(s1, s1 + 4, s1 + 7, s1 + 10, s1 + 13, s1 + 16, s1 + 19)
-error.bars(xv, c(storm_summary[1:3,]), upper=rep(0, length(xv)),
-    lower=rep(-2, length(xv)), cap.length=0.01)
+png(width=14, height=10, units='in', res=300,
+    filename='~/Desktop/NHC_stormMetabDif.png', type='cairo')
+
+par(mfrow=c(2, 1), mar=c(3, 5, 3, 1))
+gppymax = colSums(storm_summary[c(1,4),])
+erymax = colSums(storm_summary[c(2,5),])
+barplot(storm_summary[1:3,], beside=TRUE, names.arg=rep('', 7), main='Day mean',
+    ylim=c(0, max(c(gppymax, erymax))), col=c('red3', 'blue2', 'purple3'),
+    border=c('red3', 'blue2', 'purple3'), ylab='g O2 m^-2 d^-1',
+    cex.names=1.5, cex.lab=1.5, cex.main=1.5)
+legend('topright', legend=c('GPP', 'ER', 'GPP:ER'),
+    fill=c('red3', 'blue2', 'purple3'), bty='n')
+barx = seq(1.5, 26.5, 4)
+# s1 = seq(1.5, 3.5, 1)
+# xv = c(s1, s1 + 4, s1 + 8, s1 + 12, s1 + 16, s1 + 20)
+error.bars(barx, storm_summary[1,], upper=storm_summary[4,],
+    lower=storm_summary[4,], cap.length=0.01)
+error.bars(barx + 1, storm_summary[2,], upper=storm_summary[5,],
+    lower=storm_summary[5,], cap.length=0.01)
+# gppymax = colSums(storm_summary[c(6,9),])
+# erymax = colSums(storm_summary[c(7,10),])
+barplot(storm_summary[6:8,], beside=TRUE, main='Day mean minus storm mean',
+    col=c('red3', 'blue2', 'purple3'), ylab='g O2 m^-2 d^-1',
+    border=c('red3', 'blue2', 'purple3'), cex.names=1.5, cex.lab=1.5, cex.main=1.5)
+# error.bars(barx, storm_summary[6,], upper=storm_summary[9,],
+#     lower=storm_summary[9,], cap.length=0.01)
+# error.bars(barx + 1, storm_summary[7,], upper=storm_summary[10,],
+#     lower=storm_summary[10,], cap.length=0.01)
+dev.off()
+
 #task: think about how to identify and compare pre-post storm data.
 #how should we define the beginning and end of a storm?
 #how much time should we compare on either side?
