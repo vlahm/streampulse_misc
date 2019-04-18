@@ -145,14 +145,18 @@ for(i in 1:ncol(storm_summary)){
     storm_summary[5, i] = sd(erset, na.rm=TRUE) / sqrt(length(stormstarts))
 
     if(day != 'during'){
-        gppdif = gppset - duringGPP
-        erdif = erset - duringER
+        # gppdif = gppset - duringGPP
+        # erdif = erset - duringER
 
-        storm_summary[6, i] = mean(gppdif, na.rm=TRUE)
-        storm_summary[7, i] = mean(erdif, na.rm=TRUE)
+        # storm_summary[6, i] = mean(gppdif, na.rm=TRUE)
+        # storm_summary[7, i] = mean(erdif, na.rm=TRUE)
+        storm_summary[6, i] = storm_summary[1,i] - mean(duringGPP, na.rm=TRUE)
+        storm_summary[7, i] = storm_summary[2,i] - mean(duringER, na.rm=TRUE)
         storm_summary[8, i] = storm_summary[3, i] - duringratio
-        storm_summary[9, i] = sd(gppdif, na.rm=TRUE)
-        storm_summary[10, i] = sd(erdif, na.rm=TRUE)
+        storm_summary[9, i] = storm_summary[1,i] - sd(duringGPP, na.rm=TRUE) #wrong
+        storm_summary[10, i] = storm_summary[2,i] - sd(duringER, na.rm=TRUE) #wrong
+        # storm_summary[9, i] = sd(gppdif, na.rm=TRUE)
+        # storm_summary[10, i] = sd(erdif, na.rm=TRUE)
     } else {
         storm_summary[6:10, i] = NA
     }
