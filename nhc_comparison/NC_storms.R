@@ -1,6 +1,9 @@
 library(tidyr)
 library(dplyr)
 
+# 1. generating workable datasets for NHC
+#(skip this section unless generating datasets for other sites) ####
+
 #select site of interest
 focus = 'NHC'
 
@@ -76,10 +79,19 @@ stormdaily = group_by(stormdata, 'date'=as.Date(substr(dateTimeUTC, 1, 10))) %>%
     left_join(modres, by='date') %>%
     as.data.frame()
 
+#save csvs
+write.csv(stormdata, '~/Desktop/NHC_stormdata.csv', row.names=FALSE)
+write.csv(stormdaily, '~/Desktop/NHC_stormdaily.csv', row.names=FALSE)
+
+# 2. some basic exploration ####
+#read in daily storm data
+stormdaily = read.csv('~/Downloads/NHC_stormdaily.csv', stringsAsFactors=FALSE,
+    colClasses=c('date'='Date'))
+
 #see what you're dealing with
 head(stormdaily)
 
-#plot
+#plot storm occurance relative to metab series
 ylims = range(stormdaily$GPP, stormdaily$ER, na.rm=TRUE)
 plot(stormdaily$date, stormdaily$GPP, type='l', col='red', ylim=ylims,
     xlab='', ylab='g O2 m^-2 d^-1', main='NHC storms, 2017',
@@ -87,14 +99,7 @@ plot(stormdaily$date, stormdaily$GPP, type='l', col='red', ylim=ylims,
 lines(stormdaily$date, stormdaily$ER, col='blue')
 abline(v=stormdaily$date[stormdaily$storm > 0], col='gray', lty=2)
 
-#save csv
-write.csv(stormdata, '~/Desktop/NHC_stormdata.csv', row.names=FALSE)
-write.csv(stormdaily, '~/Desktop/NHC_stormdaily.csv', row.names=FALSE)
-
-stormdaily = read.csv('~/Downloads/NHC_stormdaily.csv', stringsAsFactors=FALSE,
-    colClasses=c('date'='Date'))
-
-# stormdaily$GPP = any(is.nan(stormdaily$GPP))
+#get storm indices
 stormbool = as.logical(stormdaily$storm)
 
 stormrle = rle(stormbool)
@@ -108,18 +113,13 @@ for(i in 1:length(stormchunks)){
     stormfac = append(stormfac, chunk)
 }
 
+#get metab averages during storm days
 duringGPP = tapply(stormdaily$GPP[stormbool], stormfac,
     mean, na.rm=TRUE)
 duringER = tapply(stormdaily$ER[stormbool], stormfac,
     mean, na.rm=TRUE) * -1
 
-# during = which(stormbool)
-# # stormlengths = rle(diff(during))$lengths[c(TRUE, FALSE)] + 1
-# stormlengths = stormrle$lengths[c(FALSE, TRUE)]
-# rep(stormlengths, times=stormlengths)
-# factor(stormlengths)
-# split
-
+#get pre- and post-storm index collections
 during = which(stormbool)
 day1pre = stormstarts - 1
 day2pre = stormstarts - 2
@@ -128,6 +128,8 @@ day1post = stormends + 1
 day2post = stormends + 2
 day3post = stormends + 3
 
+#get storm averages and pre - during, post - during differences
+#pre - post would also be good to know
 storm_summary = matrix(NA, 10, 7,
     dimnames=list(c('GPPmn', 'ERmn', 'GPP:ERmn', 'GPPse', 'ERse',
         'difGPPmn', 'difERmn', 'difGPP:ERmn', 'difGPPse', 'difERse'),
@@ -162,6 +164,7 @@ for(i in 1:ncol(storm_summary)){
     }
 }
 
+#plot
 error.bars <- function(x, y, upper, lower=upper, cap.length=0.1, horiz=F,...){
     if(length(x) != length(y) | length(y) !=length(lower) | length(lower) != length(upper))
         stop("One or more vectors is not the same length")
@@ -186,26 +189,11 @@ barplot(storm_summary[1:3,], beside=TRUE, names.arg=rep('', 7), main='Day mean',
 legend('topright', legend=c('GPP', 'ER', 'GPP:ER'),
     fill=c('red3', 'blue2', 'purple3'), bty='n')
 barx = seq(1.5, 26.5, 4)
-# s1 = seq(1.5, 3.5, 1)
-# xv = c(s1, s1 + 4, s1 + 8, s1 + 12, s1 + 16, s1 + 20)
 error.bars(barx, storm_summary[1,], upper=storm_summary[4,],
     lower=storm_summary[4,], cap.length=0.01)
 error.bars(barx + 1, storm_summary[2,], upper=storm_summary[5,],
     lower=storm_summary[5,], cap.length=0.01)
-# gppymax = colSums(storm_summary[c(6,9),])
-# erymax = colSums(storm_summary[c(7,10),])
 barplot(storm_summary[6:8,], beside=TRUE, main='Day mean minus storm mean',
     col=c('red3', 'blue2', 'purple3'), ylab='g O2 m^-2 d^-1',
     border=c('red3', 'blue2', 'purple3'), cex.names=1.5, cex.lab=1.5, cex.main=1.5)
-# error.bars(barx, storm_summary[6,], upper=storm_summary[9,],
-#     lower=storm_summary[9,], cap.length=0.01)
-# error.bars(barx + 1, storm_summary[7,], upper=storm_summary[10,],
-#     lower=storm_summary[10,], cap.length=0.01)
 dev.off()
-
-#task: think about how to identify and compare pre-post storm data.
-#how should we define the beginning and end of a storm?
-#how much time should we compare on either side?
-#what summary statistics (mean, max, etc) should we use?
-#looking at the data using the qaqc tool will help with thinking about this stuff.
-#code it up if you feel like it! We can go through it together too.
