@@ -12,6 +12,11 @@ library(scales)
 setwd('~/git/streampulse/other_projects/nhc_comparison')
 
 #setup ####
+
+#switch this to TRUE if you want to use only modern metab estimates from days
+#in which Q is in the same ballpark as it was for HALL's K estimates
+filter_high_Q = TRUE
+
 #read in historic data and average across multiple same-site, same-day estimates
 nhc_68_70 = read.csv('hall_table_15.csv', colClasses=c('date'='Date'))
 nhc_68_70 = nhc_68_70 %>%
@@ -55,8 +60,32 @@ nhc_17_18_K = nhc_17$model_results$data %>%
         nhc_18$model_results$fit$daily), date, K600_daily_mean)) %>%
     as.data.frame()
 
-nhc_17 = as.data.frame(nhc_17$predictions[,c('date','GPP','ER')])
-nhc_18 = as.data.frame(nhc_18$predictions[,c('date','GPP','ER')])
+if(filter_high_Q){
+
+    #highest considered depth in Hall dissertation: 0.65m
+    #corresponding Q, based on modern Z-Q curve:
+    d17 = nhc_17$model_results$data
+    dd17 = nhc_17$model_results$data_daily
+    Q_cutoff = max(na.omit(d17$discharge[d17$depth > 0.64 & d17$depth < 0.65]))
+    Q_cutoff = max(na.omit(d17$discharge[d17$depth > 0.84 & d17$depth < 0.85]))
+    Qbool = dd17$discharge.daily < Q_cutoff
+    Qbool[is.na(Qbool)] = FALSE
+    dd17 = dd17[Qbool,]
+    pred17 = nhc_17$predictions[,c('date','GPP','ER')]
+    nhc_17 = inner_join(pred17, dd17[,c('date', 'discharge.daily')], by='date')
+
+    d18 = nhc_18$model_results$data
+    dd18 = nhc_18$model_results$data_daily
+    # Q_cutoff = max(na.omit(d18$discharge[d18$depth > 0.64 & d18$depth < 0.65]))
+    Qbool = dd18$discharge.daily < Q_cutoff
+    Qbool[is.na(Qbool)] = FALSE
+    dd18 = dd18[Qbool,]
+    pred18 = nhc_18$predictions[,c('date','GPP','ER')]
+    nhc_18 = inner_join(pred18, dd18[,c('date', 'discharge.daily')], by='date')
+} else {
+    nhc_17 = as.data.frame(nhc_17$predictions[,c('date','GPP','ER')])
+    nhc_18 = as.data.frame(nhc_18$predictions[,c('date','GPP','ER')])
+}
 
 gpp_17 = nhc_17$GPP
 gpp_18 = nhc_18$GPP
@@ -275,7 +304,8 @@ gpp_17_18_mod = gpp_17_18 - mean(gpp_17_18, na.rm=TRUE) +
     mean(c(gpp_68_70, gpp_17_18), na.rm=TRUE)
 
 #verify
-mean(gpp_68_70_mod, na.rm=TRUE) == mean(gpp_17_18_mod, na.rm=TRUE)
+round(mean(gpp_68_70_mod, na.rm=TRUE), 7) ==
+    round(mean(gpp_17_18_mod, na.rm=TRUE), 7)
 
 #get historic monthly data coverage to use for sample weights
 month_counts_68_70 = tapply(rep(1, nrow(nhc_68_70)),
@@ -327,6 +357,9 @@ for(i in 1:nsamp){
 
 #p-val is proportion of times observed t-statistic >= bootstrap t-statistic
 pval_gpp = (sum(t_vect_gpp <= t_obs_gpp) + 1) / (nsamp + 1)
+if(pval_gpp == 1){
+    pval_gpp = (sum(t_vect_gpp >= t_obs_gpp) + 1) / (nsamp + 1)
+}
 
 #bootstrap Welch's t-test for ER ####
 
@@ -378,11 +411,13 @@ for(i in 1:nsamp){
 
 #p-val is proportion of times observed t-statistic >= bootstrap t-statistic
 pval_er = (sum(t_vect_er >= t_obs_er) + 1) / (nsamp + 1)
-
+if(pval_er == 1){
+    pval_er = (sum(t_vect_er >= t_obs_er) + 1) / (nsamp + 1)
+}
 #visualize GPP hypothesis test ####
 
 png(width=7, height=6, units='in', type='cairo', res=300,
-    filename='~/Dropbox/streampulse/figs/NHC_comparison/bootstrap_welch_t_weighted.png')
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/bootstrap_welch_t_weighted_filtered.png')
 
 par(mfrow=c(2,1), mar=c(4,4,1,2), oma=c(0,0,3,0))
 
@@ -504,6 +539,9 @@ SB = -86.04
 SC = 2.142
 SD = -0.0216
 SE = -0.5
+if(filter_high_Q){ #prob should do this anyway
+    nhc_17_18_K = nhc_17_18_K[nhc_17_18_K$date %in% dates_17_18,]
+}
 TT = nhc_17_18_K$temp.water
 nhc_17_18_K$K2 = nhc_17_18_K$K600_daily_mean *
     ((SA + SB * TT + SC * TT ^ 2 + SD * TT ^ 3) / 600) ^ SE
@@ -527,7 +565,7 @@ k_daily = tapply(nhc_17_18_K$k, nhc_17_18_K$date, mean, na.rm=TRUE)
 
 #plot distributions of historic and modern k
 png(width=7, height=6, units='in', type='cairo', res=300,
-    filename='~/Dropbox/streampulse/figs/NHC_comparison/k_dists.png')
+    filename='~/Dropbox/streampulse/figs/NHC_comparison/k_dists_filtered.png')
 
 xlims = range(c(k_daily, nhc_68_70_k$k_daily), na.rm=TRUE)
 cur_dens = density(k_daily, na.rm=TRUE)
