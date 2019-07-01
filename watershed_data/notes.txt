@@ -1,0 +1,8 @@
+mapzen
+whitebox
+global landcover database
+elevatr
+geovis pulls mapbox data
+    planet level cubesat imagery
+    cran
+feddata
