@@ -15,19 +15,22 @@ library(dplyr) #
 # knitr::knit_hooks$set(webgl = hook_webgl)
 
 # setwd('~/git/streampulse/other_projects/watershed_data/')
-setwd('~/Desktop/untracked/sp_watershed_delin')
+setwd('~/Desktop/untracked/sp_watershed_delin') #this can be any empty directory
 
-#read in mysql pw
-conf = readLines('/home/mike/git/streampulse/server_copy/sp/config.py')
-# conf = readLines('/home/aaron/sp/config.py')
-ind = which(lapply(conf, function(x) grepl('MYSQL_PW', x)) == TRUE)
-pw = str_match(conf[ind], '.*\\"(.*)\\"')[2]
+# #read in mysql pw
+# conf = readLines('/home/mike/git/streampulse/server_copy/sp/config.py')
+# # conf = readLines('/home/aaron/sp/config.py')
+# ind = which(lapply(conf, function(x) grepl('MYSQL_PW', x)) == TRUE)
+# pw = str_match(conf[ind], '.*\\"(.*)\\"')[2]
+#
+# #read in site and results tables from mysql
+# con = dbConnect(RMariaDB::MariaDB(), dbname='sp', username='root', password=pw)
+# sites = as_tibble(dbReadTable(con, "site")) %>%
+#     arrange(latitude, longitude) %>%
+#     mutate(regionsite=paste(region, site, sep='_'))
 
-#read in site and results tables from mysql
-con = dbConnect(RMariaDB::MariaDB(), dbname='sp', username='root', password=pw)
-sites = as_tibble(dbReadTable(con, "site")) %>%
-    arrange(latitude, longitude) %>%
-    mutate(regionsite=paste(region, site, sep='_'))
+# saveRDS(sites, '~/Desktop/site_data.rds')
+sites = readRDS('site_data.rds')
 
 # projection_table = list('equatorial'='+proj=laea +lon_0=-125.859375',
 #     'temperate'='+proj=laea +lat_0=37.71859032558816 +lon_0=-86.484375',
@@ -54,7 +57,7 @@ for(i in 1:length(regions)){
         st_as_sf(coords=c('longitude','latitude'), crs=4326) %>%
         st_transform(PROJ4)
 
-    #get DEM, 14 is highest res, broadest area; 1 is converse
+    #get DEM, 14 is highest res, broadest area; 1 is lowest res
     dem = get_elev_raster(subset, z=4)
     mapview(dem) + mapview(subset)
 
