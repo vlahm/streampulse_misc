@@ -139,51 +139,41 @@ sites = left_join(sites, streamcat_data, by='COMID')
 sites = sites[! duplicated(sites$sitecode),]
 sites = arrange(sites, region, sitecode)
 
-#generate/retrieve watershed boundaries ####
+#generate streampulse watershed boundaries ####
 
-if(mode == 'run'){
+library(rgdal)
+library(streamstats)
+library(htmlwidgets)
 
-    library(rgdal)
-    library(streamstats)
-    library(htmlwidgets)
+unlink('spatial/scratch', recursive=TRUE)
 
-    unlink('spatial/indiv_sp_ws/*', recursive=TRUE)
-    unlink('spatial/interactive_maps/*', recursive=TRUE)
+sites_sp = filter(sites, Source == 'StreamPULSE')
 
-    sites_sp = filter(sites, Source == 'StreamPULSE')
-
-    for(i in 1:nrow(sites_sp)){
-
-        current_sitecode = sites_sp$sitecode[i]
-
-        ws_bound = try( streamstats::delineateWatershed(sites_sp$Lon[i],
-            sites_sp$Lat[i], crs=WGS84) )
-        if('try-error' %in% class(ws_bound)) next
-
-        #save watershed boundary as shapefile
-        tpf = tempfile(fileext='.geojson')
-        streamstats::writeGeoJSON(ws_bound, file=tpf, what='boundary')
-        spatialdf = rgdal::readOGR(tpf)
-        unlink(tpf)
-        rgdal::writeOGR(spatialdf, dsn='spatial/indiv_sp_ws',
-            layer=current_sitecode, driver='ESRI Shapefile')
-
-        #save interactive webpage for viewing boundary on basemap
-        webfile = try( streamstats::leafletWatershed(ws_bound) )
-        if('try-error' %in% class(webfile)) next
-
-        setwd('spatial/interactive_maps/')
-        htmlwidgets::saveWidget(webfile, selfcontained=FALSE,
-            file=paste0(current_sitecode, '.html'))
-        setwd('../..')
-    }
-
+for(i in 1:nrow(sites_sp)){
+    
+    current_sitecode = sites_sp$sitecode[i]
+    
+    #delineate watershed with streamstats package
+    z = streamstats::delineateWatershed(sites_sp$Lon[i], sites_sp$Lat[i],
+        crs=WGS84)
+    
+    #save watershed boundary as shapefile
+    #streamstats::toSp and streamstats::writeShapefile are broken;
+    #the bodies of those functions are extracted and modified below:
+    tpf = tempfile(fileext='.geojson')
+    streamstats::writeGeoJSON(z, file=tpf, what='boundary')
+    spatialdf = rgdal::readOGR(tpf)
+    unlink(tpf)
+    rgdal::writeOGR(spatialdf, dsn='spatial/indiv_sp_ws',
+        layer=current_sitecode, driver='ESRI Shapefile')
+    
+    zz = streamstats::leafletWatershed(z)
+    
+    htmlwidgets::saveWidget(zz, paste0(current_sitecode, '.html'),
+        selfcontained=FALSE)
 }
-
-#import and filter boundaries ####
-
-# HERE: wget and unzip powell datasets
-
+    
+#import powell boundaries; filter all boundaries ####
 #bind IGBP landcover classifications (MCD12Q1v006 LC_Type1) ####
 #bind MODIS data ####
 #bind Fluxnet data ####
@@ -431,3 +421,4 @@ for(i in 1:10){
 }
 
 dev.off()
+

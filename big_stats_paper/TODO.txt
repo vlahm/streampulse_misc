@@ -1,0 +1,4 @@
+turn geo helpers into a package
+
+have ready for meeting:
+    variable descriptions from NHDPlusV2, StreamCat, MODIS, Fluxnet, EPA, Phil
