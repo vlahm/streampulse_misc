@@ -168,6 +168,14 @@ if(mode == 'run'){
         rgdal::writeOGR(spatialdf, dsn='spatial/indiv_sp_ws',
             layer=current_sitecode, driver='ESRI Shapefile')
 
+        #thin to just 30 points and save copy for earthexplorer
+        crds = spatialdf@polygons[[1]]@Polygons[[1]]@coords
+        filt_ind = round(seq(1, nrow(crds), length.out=30))
+        spatialdf@polygons[[1]]@Polygons[[1]]@coords = crds[filt_ind, ]
+
+        rgdal::writeOGR(spatialdf, dsn='spatial/indiv_sp_ws_30pts',
+            layer=current_sitecode, driver='ESRI Shapefile')
+
         #save interactive webpage for viewing boundary on basemap
         webfile = try( streamstats::leafletWatershed(ws_bound) )
         if('try-error' %in% class(webfile)) next
@@ -180,254 +188,277 @@ if(mode == 'run'){
 
 }
 
-#import and filter boundaries ####
+#filter and zip boundaries ####
+
+shedfiles = list.files('spatial/indiv_sp_ws/')
+sheds = unique(unname(sapply(shedfiles, function(x){
+        strsplit(x, '\\.')[[1]][1]
+    })))
+
+for(s in sheds){
+    setwd('spatial/indiv_sp_ws/')
+    zip(paste0(s, '.zip'), list.files(pattern=s))
+    file.rename(paste0(s, '.zip'), paste0('../indiv_sp_ws_zips/', s, '.zip'))
+    setwd('../..')
+    # wshed = rgdal::readOGR('spatial/indiv_sp_ws/', s)
+}
+
+shedfiles_30pt = list.files('spatial/indiv_sp_ws_30pts/')
+sheds_30pt = unique(unname(sapply(shedfiles_30pt, function(x){
+        strsplit(x, '\\.')[[1]][1]
+    })))
+
+for(s in sheds_30pt){
+    setwd('spatial/indiv_sp_ws_30pts/')
+    zip(paste0(s, '.zip'), list.files(pattern=s))
+    file.rename(paste0(s, '.zip'), paste0('../indiv_sp_ws_30pts_zips/', s, '.zip'))
+    setwd('../..')
+    # wshed = rgdal::readOGR('spatial/indiv_sp_ws/', s)
+}
 
 # HERE: wget and unzip powell datasets
 
 #bind IGBP landcover classifications (MCD12Q1v006 LC_Type1) ####
-#bind MODIS data ####
-#bind Fluxnet data ####
 
-#merge model output data ####
-mods = query_available_results('all')[[1]] %>%
-    as_tibble() %>%
-    mutate_all(as.character) %>%
-    left_join(sites, 'site') %>%
-    mutate(Site_ID=paste(region, site, sep='_')) %>%
+library(gdalUtils)
+library(raster)
+
+setwd('spatial/igbp_classes/hdfs')
+hdfs = list.files(pattern='.hdf')
+
+#extract igbp classification layer from hdf4s and convert to geotiffs
+for(f in hdfs){
+    sitecode = strsplit(f, '\\.')[[1]][1]
+    sds = gdalUtils::get_subdatasets(f)
+    igbp_ind = grep('Type1', sds)
+    gtfile = paste0('../geotiffs/', sitecode, '.tif')
+    gdalUtils::gdal_translate(sds[igbp_ind], dst_dataset=gtfile)
+}
+
+#HERE: CUT GEOTIFF RASTER OF ECOREGIONS BY WS BOUNDS
+    rast = raster::raster(gtfile)
+
+
+#summarize raster by wshed boundary
+pgon = sp::SpatialPolygons(wsboundary@polygons,
+    # proj4string=sp::CRS(PROJ4)) %>%
+    #only one CRS is accepted? should probs reproject wsboundary tp WGS84
+    proj4string=sp::CRS('+proj=longlat +datum=WGS84')) %>%
+    simplegeom()
+spset_job = geoknife(stencil=pgon, fabric=spset, wait=TRUE)
+spset_cutout = result(spset_job, with.units=TRUE)
+check(spset_job)
+head(spset_cutout)
+
+#summarize by point
+station = as.data.frame(t(site[,c('longitude', 'latitude')]))
+colnames(station) = paste(site$region, site$sitecode, sep='_')
+station = simplegeom(station)
+
+spset_job = geoknife(stencil=station, fabric=spset, wait=TRUE)
+spset_summ = result(spset_job, with.units=TRUE)
+check(spset_job)
+head(spset_summ)
+
+
+#bind other MODIS data? ####
+#bind Fluxnet data? ####
+
+#bind site data to model output data; separate sp/powell ####
+
+mods = mods %>%
+    left_join(sites, 'site'='sitecode') %>%
     filter(! is.na(Name)) %>%
     distinct() %>%
-    arrange(Site_ID, year)
+    arrange(sitecode, year)
 
-#gpp-er biplots ####
-cnt = 0
-hold_cnt = FALSE
-errtypes = errmods = errs = list()
+spmods = filter(mods, Source == 'StreamPULSE')
+powmods = filter(mods, Source == 'USGS (Powell Center)')
 
-pdf(file='output/streampulse_gppXer_all.pdf', onefile=TRUE)
-par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 1, 1, 1))
+#plot functions ####
 
-for(i in 1:nrow(mods)){
+gpp_er_biplot = function(mods, outfile){
 
-    m = mods[i,]
-    res = try( request_results(sitecode=m$Site_ID,
-                year=as.numeric(m$year)) )
+    cnt = 0
+    hold_cnt = FALSE
+    errtypes = errmods = errs = list()
 
-    if(class(res) == 'try-error'){
-        errtypes = append(errtypes, 'request_err')
-        errmods = append(errmods, paste(m$Site_ID, i))
-        errs = append(errs, res)
-        hold_cnt = TRUE
-        next
-    }
+    pdf(file=outfile, onefile=TRUE)
+    par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 1, 1, 1))
 
-    if(nrow(res$predictions) == 0){
-        errtypes = append(errtypes, 'no_predictions')
-        errmods = append(errmods, paste(m$Site_ID, i))
-        errs = append(errs, 'NA')
-    }
+    for(i in 1:nrow(mods)){
 
-    tryCatch({
+        m = mods[i,]
+        res = try( request_results(sitecode=m$sitecode,
+                    year=as.numeric(m$year)) )
 
-        mout = lm(res$predictions$ER ~ res$predictions$GPP)
-        mres = summary(mout)
-        coeffs = round(unname(mres$coefficients[,'Estimate']), 2)
-        icept = sprintf('%+.2f', coeffs[1])
-        icept = paste(substr(icept, 0, 1), substr(icept, 2, nchar(icept)))
-        coeff_lab = paste0('y = ', coeffs[2], 'x ', icept, ' (Adj. R^2: ',
-            round(mres$adj.r.squared, 2), ')')
-
-        # plot(res$predictions$GPP, res$predictions$ER, main=m$Site_ID,
-        plot(res$predictions$GPP, res$predictions$ER, main='', xlab='GPP',
-            ylab='ER', bty='l', col=alpha('gray30', 0.7), pch=20)
-        abline(mout, lty=2, col='red', lwd=2)
-        mtext(paste0(m$Site_ID, ' (', m$year, ')\n', coeff_lab),
-            side=3, line=0, cex=0.7)
-
-
-    }, error=function(e){
-            errtypes = append(errtypes, 'plot/stat_err')
-            errmods = append(errmods, paste(m$Site_ID, i))
-            errs = append(errs, e)
-        }
-    )
-
-    cnt = cnt + 1
-    gc()
-}
-
-dev.off()
-
-
-# time series plots without K ####
-cnt = 0
-hold_cnt = FALSE
-errtypes2 = errmods2 = errs2 = list()
-
-pdf(file='output/streampulse_metab_ts_all_noK.pdf', onefile=TRUE)
-par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 1, 1, 1))
-
-# for(i in 1:nrow(mods)){
-for(i in 1:10){
-
-    m = mods[i,]
-    res = try( request_results(sitecode=m$Site_ID,
-        year=as.numeric(m$year)) )
-
-    if(class(res) == 'try-error'){
-        errtypes2 = append(errtypes2, 'request_err')
-        errmods2 = append(errmods2, paste(m$Site_ID, i))
-        errs2 = append(errs2, res)
-        hold_cnt = TRUE
-        next
-    }
-
-    if(nrow(res$predictions) == 0){
-        errtypes2 = append(errtypes2, 'no_predictions')
-        errmods2 = append(errmods2, paste(m$Site_ID, i))
-        errs2 = append(errs2, 'NA')
-    }
-
-    tryCatch({
-
-        o = res$model_results$fit$daily
-
-        llim = min(c(o$GPP_daily_2.5pct, o$ER_daily_2.5pct), na.rm=TRUE)
-        ulim = max(c(o$GPP_daily_97.5pct, o$ER_daily_97.5pct), na.rm=TRUE)
-        # maxmin_day = range(doy, na.rm=TRUE)
-        plot(o$date, o$GPP_daily_mean, type='l', col='red', xlab='', las=0,
-            ylab='', xaxs='i', yaxs='i', ylim=c(llim, ulim), bty='l', yaxt='n')
-        axis(2, tck=-.02, labels=FALSE)
-        axis(2, tcl=0, col='transparent', line=-0.5)
-        mtext(paste0(m$Site_ID, ' (', m$year, ')'), side=3, line=0, cex=0.7)
-        lines(o$date, o$ER_daily_mean, col='blue')
-        mtext(expression(paste("g"~O[2]~"m"^"-2"~" d"^"-1")), side=2,
-            line=1.5, font=2, cex=0.7)
-
-
-        rl = rle(is.na(o$GPP_daily_2.5pct))
-        vv = !rl$values
-        chunkfac = rep(cumsum(vv), rl$lengths)
-        chunkfac[chunkfac == 0] = 1
-        chunks = split(o, chunkfac)
-        noNAchunks = lapply(chunks, function(x) x[!is.na(x$GPP_daily_2.5pct),] )
-
-        for(i in 1:length(noNAchunks)){
-            polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-                y=c(noNAchunks[[i]]$GPP_daily_2.5pct,
-                    rev(noNAchunks[[i]]$GPP_daily_97.5pct)),
-                col=adjustcolor('red', alpha.f=0.3), border=NA)
-            polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-                y=c(noNAchunks[[i]]$ER_daily_2.5pct,
-                    rev(noNAchunks[[i]]$ER_daily_97.5pct)),
-                col=adjustcolor('blue', alpha.f=0.3), border=NA)
+        if(class(res) == 'try-error'){
+            errtypes = append(errtypes, 'request_err')
+            errmods = append(errmods, paste(m$sitecode, i))
+            errs = append(errs, res)
+            hold_cnt = TRUE
+            next
         }
 
-        abline(h=0, lty=3, col='gray50')
-
-    }, error=function(e){
-            errtypes2 = append(errtypes2, 'plot/stat_err')
-            errmods2 = append(errmods2, paste(m$Site_ID, i))
-            errs2 = append(errs2, e)
-    }, warning=function(w) NULL)
-
-    cnt = cnt + 1
-    gc()
-}
-
-dev.off()
-
-
-# time series plots with K ####
-cnt = 0
-hold_cnt = FALSE
-errtypes_3 = errmods_3 = errs_3 = list()
-
-pdf(file='output/streampulse_metab_ts_all.pdf', onefile=TRUE)
-par(mfrow=c(3, 3), mar=c(3, 3, 1, 3), oma=c(1, 1, 1, 1))
-
-# for(i in 1:nrow(mods)){
-for(i in 1:10){
-
-    m = mods[i,]
-    res = try( request_results(sitecode=m$Site_ID,
-        year=as.numeric(m$year)) )
-
-    if(class(res) == 'try-error'){
-        errtypes_3 = append(errtypes_3, 'request_err')
-        errmods_3 = append(errmods_3, paste(m$Site_ID, i))
-        errs_3 = append(errs_3, res)
-        hold_cnt = TRUE
-        next
-    }
-
-    if(nrow(res$predictions) == 0){
-        errtypes_3 = append(errtypes_3, 'no_predictions')
-        errmods_3 = append(errmods_3, paste(m$Site_ID, i))
-        errs_3 = append(errs_3, 'NA')
-    }
-
-    tryCatch({
-
-        o = res$model_results$fit$daily
-
-        llim = min(c(o$GPP_daily_2.5pct, o$ER_daily_2.5pct), na.rm=TRUE)
-        ulim = max(c(o$GPP_daily_97.5pct, o$ER_daily_97.5pct), na.rm=TRUE)
-        # maxmin_day = range(doy, na.rm=TRUE)
-        plot(o$date, o$GPP_daily_mean, type='l', col='red', xlab='', las=0,
-            ylab='', xaxs='i', yaxs='i', ylim=c(llim, ulim), bty='l', yaxt='n')
-        axis(2, tck=-.02, labels=FALSE)
-        axis(2, tcl=0, col='transparent', line=-0.5)
-        mtext(paste0(m$Site_ID, ' (', m$year, ')'), side=3, line=0, cex=0.7)
-        lines(o$date, o$ER_daily_mean, col='blue')
-        mtext(expression(paste("g"~O[2]~"m"^"-2"~" d"^"-1")), side=2,
-            line=1.5, font=2, cex=0.7)
-
-
-        rl = rle(is.na(o$GPP_daily_2.5pct))
-        vv = !rl$values
-        chunkfac = rep(cumsum(vv), rl$lengths)
-        chunkfac[chunkfac == 0] = 1
-        chunks = split(o, chunkfac)
-        noNAchunks = lapply(chunks, function(x) x[!is.na(x$GPP_daily_2.5pct),] )
-
-        for(i in 1:length(noNAchunks)){
-            polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-                y=c(noNAchunks[[i]]$GPP_daily_2.5pct,
-                    rev(noNAchunks[[i]]$GPP_daily_97.5pct)),
-                col=adjustcolor('red', alpha.f=0.3), border=NA)
-            polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-                y=c(noNAchunks[[i]]$ER_daily_2.5pct,
-                    rev(noNAchunks[[i]]$ER_daily_97.5pct)),
-                col=adjustcolor('blue', alpha.f=0.3), border=NA)
+        if(nrow(res$predictions) == 0){
+            errtypes = append(errtypes, 'no_predictions')
+            errmods = append(errmods, paste(m$sitecode, i))
+            errs = append(errs, 'NA')
         }
 
-        abline(h=0, lty=3, col='gray50')
+        tryCatch({
 
-        par(new=TRUE)
-        llim2 = min(o$K600_daily_2.5pct, na.rm=TRUE)
-        ulim2 = max(o$K600_daily_97.5pct, na.rm=TRUE)
-        plot(o$date, o$K600_daily_mean, col='orange',
-            type='l', xlab='', las=0, ylab='', xaxs='i', yaxs='i',
-            xaxt='n', bty='u', yaxt='n', ylim=c(llim2, ulim2))
-        axis(4, tck=-.02, labels=FALSE)
-        axis(4, tcl=0, col='transparent', line=-0.5, las=1)
-        mtext(expression(paste('K600 (d'^'-1' * ')')), side=4, line=2,
-            font=2, cex=0.7)
-        # for(i in 1:length(noNAchunks)){
-        #     polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-        #         y=c(noNAchunks[[i]]$K600_daily_2.5pct,
-        #             rev(noNAchunks[[i]]$K600_daily_97.5pct)),
-        #         col=adjustcolor('orange', alpha.f=0.3), border=NA)
-        # }
+            mout = lm(res$predictions$ER ~ res$predictions$GPP)
+            mres = summary(mout)
+            coeffs = round(unname(mres$coefficients[,'Estimate']), 2)
+            icept = sprintf('%+.2f', coeffs[1])
+            icept = paste(substr(icept, 0, 1), substr(icept, 2, nchar(icept)))
+            coeff_lab = paste0('y = ', coeffs[2], 'x ', icept, ' (Adj. R^2: ',
+                round(mres$adj.r.squared, 2), ')')
 
-    }, error=function(e){
-        errtypes_3 = append(errtypes_3, 'plot/stat_err')
-        errmods_3 = append(errmods_3, paste(m$Site_ID, i))
-        errs_3 = append(errs_3, e)
-    }, warning=function(w) NULL)
+            # plot(res$predictions$GPP, res$predictions$ER, main=m$sitecode,
+            plot(res$predictions$GPP, res$predictions$ER, main='', xlab='GPP',
+                ylab='ER', bty='l', col=alpha('gray30', 0.7), pch=20)
+            abline(mout, lty=2, col='red', lwd=2)
+            mtext(paste0(m$sitecode, ' (', m$year, ')\n', coeff_lab),
+                side=3, line=0, cex=0.7)
 
-    cnt = cnt + 1
-    gc()
+
+        }, error=function(e){
+                errtypes = append(errtypes, 'plot/stat_err')
+                errmods = append(errmods, paste(m$sitecode, i))
+                errs = append(errs, e)
+            }
+        )
+
+        cnt = cnt + 1
+        gc()
+    }
+
+    dev.off()
+
+    return(list(errtypes=errtypes, errmosd=errmods, errs=errs))
 }
 
-dev.off()
+ts_plot = function(mods, outfile, with_K){
+
+    cnt = 0
+    hold_cnt = FALSE
+    errtypes2 = errmods2 = errs2 = list()
+
+    pdf(file=outfile, onefile=TRUE)
+
+    if(with_K){
+        par(mfrow=c(3, 3), mar=c(3, 3, 1, 3), oma=c(1, 1, 1, 1))
+    } else {
+        par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 1, 1, 1))
+    }
+
+    for(i in 1:nrow(mods)){
+
+        m = mods[i,]
+        res = try( request_results(sitecode=m$sitecode,
+            year=as.numeric(m$year)) )
+
+        if(class(res) == 'try-error'){
+            errtypes2 = append(errtypes2, 'request_err')
+            errmods2 = append(errmods2, paste(m$sitecode, i))
+            errs2 = append(errs2, res)
+            hold_cnt = TRUE
+            next
+        }
+
+        if(nrow(res$predictions) == 0){
+            errtypes2 = append(errtypes2, 'no_predictions')
+            errmods2 = append(errmods2, paste(m$sitecode, i))
+            errs2 = append(errs2, 'NA')
+        }
+
+        tryCatch({
+
+            o = res$model_results$fit$daily
+
+            llim = min(c(o$GPP_daily_2.5pct, o$ER_daily_2.5pct), na.rm=TRUE)
+            ulim = max(c(o$GPP_daily_97.5pct, o$ER_daily_97.5pct), na.rm=TRUE)
+
+            fulldateseq = seq(as.Date(paste0(m$year, '-01-01')),
+                as.Date(paste0(m$year, '-12-31')), by='day')
+            o = left_join(tibble(date=fulldateseq), o)
+            plot(o$date, o$GPP_daily_mean, type='l', col='red', xlab='', las=0,
+                ylab='', xaxs='i', yaxs='i', ylim=c(llim, ulim), bty='l', yaxt='n',
+                xaxt='n')
+            month_starts = o$date[substr(o$date, 9, 10) == '01']
+            # all_month_starts_abb = paste0(sprintf('%02d', 1:12), '-01')
+            # which_starts = all_month_starts_abb %in% substr(month_starts, 6, 10)
+            axis(1, at=month_starts, labels=substr(month.abb, 1, 1),
+                cex.axis=0.6)
+            axis(2, tck=-.02, labels=FALSE)
+            axis(2, tcl=0, col='transparent', line=-0.5)
+            mtext(paste0(m$sitecode, ' (', m$year, ')'), side=3, line=0, cex=0.7)
+            lines(o$date, o$ER_daily_mean, col='blue')
+            mtext(expression(paste("g"~O[2]~"m"^"-2"~" d"^"-1")), side=2,
+                line=1.5, font=2, cex=0.7)
+
+            rl = rle(is.na(o$GPP_daily_2.5pct))
+            vv = !rl$values
+            chunkfac = rep(cumsum(vv), rl$lengths)
+            chunkfac[chunkfac == 0] = 1
+            chunks = split(o, chunkfac)
+            noNAchunks = lapply(chunks, function(x) x[!is.na(x$GPP_daily_2.5pct),] )
+
+            for(i in 1:length(noNAchunks)){
+                polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
+                    y=c(noNAchunks[[i]]$GPP_daily_2.5pct,
+                        rev(noNAchunks[[i]]$GPP_daily_97.5pct)),
+                    col=adjustcolor('red', alpha.f=0.3), border=NA)
+                polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
+                    y=c(noNAchunks[[i]]$ER_daily_2.5pct,
+                        rev(noNAchunks[[i]]$ER_daily_97.5pct)),
+                    col=adjustcolor('blue', alpha.f=0.3), border=NA)
+            }
+
+            abline(h=0, lty=3, col='gray50')
+
+            if(with_K){
+
+                par(new=TRUE)
+                llim2 = min(o$K600_daily_2.5pct, na.rm=TRUE)
+                ulim2 = max(o$K600_daily_97.5pct, na.rm=TRUE)
+                plot(o$date, o$K600_daily_mean, col='orange',
+                    type='l', xlab='', las=0, ylab='', xaxs='i', yaxs='i',
+                    xaxt='n', bty='u', yaxt='n', ylim=c(llim2, ulim2))
+                axis(4, tck=-.02, labels=FALSE)
+                axis(4, tcl=0, col='transparent', line=-0.5, las=1)
+                mtext(expression(paste('K600 (d'^'-1' * ')')), side=4, line=2,
+                    font=2, cex=0.7)
+                # for(i in 1:length(noNAchunks)){
+                #     polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
+                #         y=c(noNAchunks[[i]]$K600_daily_2.5pct,
+                #             rev(noNAchunks[[i]]$K600_daily_97.5pct)),
+                #         col=adjustcolor('orange', alpha.f=0.3), border=NA)
+                # }
+            }
+
+
+        }, error=function(e){
+                errtypes2 = append(errtypes2, 'plot/stat_err')
+                errmods2 = append(errmods2, paste(m$sitecode, i))
+                errs2 = append(errs2, e)
+        }, warning=function(w) NULL)
+
+        cnt = cnt + 1
+        gc()
+    }
+
+    dev.off()
+
+    return(list(errtypes=errtypes2, errmosd=errmods2, errs=errs2))
+}
+
+#plots ####
+gpp_er_biplot(spmods, 'output/streampulse_gppXer_sp.pdf')
+gpp_er_biplot(powmods, 'output/streampulse_gppXer_powell.pdf')
+ts_plot(spmods, 'output/streampulse_metab_ts_sp_noK.pdf', FALSE)
+ts_plot(powmods, 'output/streampulse_metab_ts_powell_noK.pdf', FALSE)
+ts_plot(spmods, 'output/streampulse_metab_ts_sp.pdf', TRUE)
+ts_plot(powmods, 'output/streampulse_metab_ts_powell.pdf', TRUE)

@@ -2,3 +2,15 @@ turn geo helpers into a package
 
 have ready for meeting:
     variable descriptions from NHDPlusV2, StreamCat, MODIS, Fluxnet, EPA, Phil
+
+still gotta run some streamcat stuff and incorporate
+deal with powell shapefiles
+
+gotta finish making 30pt shapes and zips if i want to use earthexplorer
+
+is igbp raster downloaded for a whole year averaged over that year?
+
+gotta mke sure i filter the rasters by the sites on the list
+
+finish making all the series plots
+    just gotta plot powell
