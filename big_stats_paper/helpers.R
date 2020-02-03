@@ -178,3 +178,27 @@ streamcat_bulk = function(site_df, streamcat_sets){
 
     return(streamcat_data)
 }
+
+filter_and_impute = function(diagnostics, models, ...){
+
+    filt = filter_metab(diag=diagnostics, ..., metab_rds=models)
+    imp = synthesis_gapfill(filt, PQ=1.25, block=Inf, pmiss=99)
+
+    return(imp)
+}
+
+consolidate_list = function(daily_summaries){
+
+    daily_summaries = Map(function(x){
+        if(is.null(x)) return()
+        x = select(x, DOY, GPP_C_filled, ER_C_filled)
+        return(x)
+    }, daily_summaries)
+
+    smry = Reduce(function(x, y){
+        out = bind_rows(x, y)
+        return(out)
+    }, daily_summaries)
+
+    return(smry)
+}

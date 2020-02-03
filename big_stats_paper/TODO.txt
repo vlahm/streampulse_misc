@@ -14,3 +14,12 @@ gotta mke sure i filter the rasters by the sites on the list
 
 finish making all the series plots
     just gotta plot powell
+    remove -GPP, +ER
+    express ER as +
+    standardize to T20
+    gap fill (linear)
+    save stats
+    convert all estimates to gC using PQ (productivity quotient) of 1.25 (for mol O2 / mol C)
+    
+add bool erXk < 0.05 to diag df; add filter arg for that
+

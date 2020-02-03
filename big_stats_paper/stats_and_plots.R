@@ -11,11 +11,24 @@ mode = 'retrieve'
 
 setwd('~/git/streampulse/other_projects/big_stats_paper/')
 source('helpers.R')
+phil_srcs = list.files('phil_stuff/metab_synthesis/R/functions/',
+    full.names=TRUE)
+for(x in phil_srcs) source(x)
 
+
+#datasets from Phil
+metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
+diag = as_tibble(readRDS('phil_stuff/metab_synthesis/output/yearly_diagnostics.rds'))
+metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds')) %>%
+    arrange(desc(ann_GPP_C))
+# filled = readRDS('phil_stuff/output/synthesis_gap_filled.rds')
+
+#model results from streampulse portal
 mods = query_available_results('all')[[1]] %>%
     as_tibble() %>%
     mutate_all(as.character)
 
+#subset of streampulse + powell sites used in this analysis
 sites = as_tibble(readRDS('sites_COMID.rds'))
 nwis_ind = substr(sites$Site_ID, 1, 4) == 'nwis'
 sites$Site_ID[nwis_ind] = gsub('_', '-', sites$Site_ID[nwis_ind])
@@ -456,9 +469,87 @@ ts_plot = function(mods, outfile, with_K){
 }
 
 #plots ####
-gpp_er_biplot(spmods, 'output/streampulse_gppXer_sp.pdf')
-gpp_er_biplot(powmods, 'output/streampulse_gppXer_powell.pdf')
-ts_plot(spmods, 'output/streampulse_metab_ts_sp_noK.pdf', FALSE)
-ts_plot(powmods, 'output/streampulse_metab_ts_powell_noK.pdf', FALSE)
-ts_plot(spmods, 'output/streampulse_metab_ts_sp.pdf', TRUE)
-ts_plot(powmods, 'output/streampulse_metab_ts_powell.pdf', TRUE)
+gpp_er_biplot(spmods, 'output/gppXer_sp.pdf')
+gpp_er_biplot(powmods, 'output/_gppXer_powell.pdf')
+ts_plot(spmods, 'output/metab_ts_sp_noK.pdf', FALSE)
+ts_plot(powmods, 'output/metab_ts_powell_noK.pdf', FALSE)
+ts_plot(spmods, 'output/metab_ts_sp.pdf', TRUE)
+ts_plot(powmods, 'output/metab_ts_powell.pdf', TRUE)
+
+# barplot(metr$ann_GPP_C, ylab='', yaxt='n', yaxs='i',
+#     width=0.03, space=0.5, xlim=c(0, 10))
+# axis(2, las=2, line=-1.8, at=seq500)
+# axis(2, las=2, line=-1.8, at=seq500,
+#     tcl=0, col='white', lwd=2)
+# mtext('Mean annual GPP (C)', side=2, line=2)
+
+pdf(file='output/metab_dist.pdf', width=12, height=7)
+
+par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+seq500 = seq(500, 3000, 500)
+
+plot(metr$ann_GPP_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_GPP_C, lwd=3,
+    lend=2)
+axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
+axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
+mtext(expression(paste("Mean annual GPP (g"~O[2]~"m"^"-2"~" d"^"-1"*')')),
+    side=2, line=2)
+
+par(mar=c(3, 3, 0, 1))
+
+plot(metr$ann_ER_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_ER_C, lwd=3,
+    lend=2, col='gray50')
+axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
+axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
+    tcl=0, col='white', lwd=2)
+mtext(expression(paste("Mean annual ER (g"~O[2]~"m"^"-2"~" d"^"-1"*')')),
+    side=2, line=2)
+
+dev.off()
+
+#overall lips plot ####
+pdf(file='output/lips_overall.pdf', width=12, height=7)
+
+par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+
+plot(metr$ann_GPP_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_GPP_C, lwd=3,
+    lend=2)
+axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
+axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
+mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
+    side=2, line=2)
+
+par(mar=c(3, 3, 0, 1))
+
+plot(metr$ann_ER_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_ER_C, lwd=3,
+    lend=2, col='gray50')
+axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
+axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
+    tcl=0, col='white', lwd=2)
+mtext(expression(paste("Mean annual ER (gC"~"m"^"-2"~" d"^"-1"*')')),
+    side=2, line=2)
+
+dev.off()
+
+#apply Philters and gapPhills; generate sub-datasets ####
+
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 165')
+saveRDS(filt, 'output/filtered_dsets/daysOver165.rds')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 250')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 165', 'ER_K < 0.6')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 165', 'ER_K < 0.4')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 250', 'ER_K < 0.6')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 250', 'ER_K < 0.4')
+saveRDS(filt, 'output/filtered_dsets/daysOver165_ERKunder40.rds')
+
+filt = readRDS('output/filtered_dsets/daysOver165_ERKunder40.rds')
+
+smry = consolidate_list(filt) %>%
+    as_tibble() %>%
+    group_by(DOY) %>%
+    summarize_all(median=median(., na.rm=TRUE))
+
