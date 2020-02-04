@@ -15,35 +15,23 @@ phil_srcs = list.files('phil_stuff/metab_synthesis/R/functions/',
     full.names=TRUE)
 for(x in phil_srcs) source(x)
 
+#model results from streampulse portal
+mods = query_available_results('all')[[1]] %>%
+    as_tibble() %>%
+    mutate_all(as.character)
 
 #datasets from Phil
 metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
 diag = as_tibble(readRDS('phil_stuff/metab_synthesis/output/yearly_diagnostics.rds'))
 metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds')) %>%
     arrange(desc(ann_GPP_C))
+ws_metr = as_tibble(readRDS('phil_stuff/output/metrics_bound.rds'))
+ws_metr = phil_to_mike_format(ws_metr, mods)
 # filled = readRDS('phil_stuff/output/synthesis_gap_filled.rds')
-
-#model results from streampulse portal
-mods = query_available_results('all')[[1]] %>%
-    as_tibble() %>%
-    mutate_all(as.character)
 
 #subset of streampulse + powell sites used in this analysis
 sites = as_tibble(readRDS('sites_COMID.rds'))
-nwis_ind = substr(sites$Site_ID, 1, 4) == 'nwis'
-sites$Site_ID[nwis_ind] = gsub('_', '-', sites$Site_ID[nwis_ind])
-sites$site = unname(sapply(sites$Site_ID, function(x) strsplit(x, '_')[[1]][2]))
-sites$site[is.na(sites$site)] = sites$Site_ID[is.na(sites$site)]
-sites$Site_ID = NULL
-
-#join region column from model outputs (which for streampulse == US state)
-sites = sites %>%
-    left_join(mods, 'site') %>%
-    mutate(sitecode=paste(region, site, sep='_')) %>%
-    filter(! is.na(Name)) %>%
-    select(-year) %>%
-    distinct() %>%
-    arrange(sitecode)
+sites = phil_to_mike_format(sites, mods)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
 
@@ -118,7 +106,7 @@ sites$AREASQKM_corr = round(sites$AREASQKM * sites$reach_proportion, 5)
 sites$TOTDASQKM_corr = sites$TOTDASQKM - (sites$AREASQKM - sites$AREASQKM_corr)
 sites$areal_corr_factor = sites$TOTDASQKM_corr / sites$TOTDASQKM
 
-#bind StreamCat data ####
+#bind StreamCat data (superfluous since Phil added ws_metr) ####
 
 if(mode == 'run'){
 
@@ -151,6 +139,8 @@ if(mode == 'run'){
 sites = left_join(sites, streamcat_data, by='COMID')
 sites = sites[! duplicated(sites$sitecode),]
 sites = arrange(sites, region, sitecode)
+
+#bind Phil's StreamCat dataset ####
 
 #generate/retrieve watershed boundaries ####
 
@@ -509,47 +499,62 @@ mtext(expression(paste("Mean annual ER (g"~O[2]~"m"^"-2"~" d"^"-1"*')')),
 
 dev.off()
 
-#overall lips plot ####
-pdf(file='output/lips_overall.pdf', width=12, height=7)
-
-par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
-
-plot(metr$ann_GPP_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
-segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_GPP_C, lwd=3,
-    lend=2)
-axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
-axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
-mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
-    side=2, line=2)
-
-par(mar=c(3, 3, 0, 1))
-
-plot(metr$ann_ER_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
-segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_ER_C, lwd=3,
-    lend=2, col='gray50')
-axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
-axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
-    tcl=0, col='white', lwd=2)
-mtext(expression(paste("Mean annual ER (gC"~"m"^"-2"~" d"^"-1"*')')),
-    side=2, line=2)
-
-dev.off()
 
 #apply Philters and gapPhills; generate sub-datasets ####
 
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.6')
+saveRDS(filt, 'output/filtered_dsets/ERKunder60.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.4')
+saveRDS(filt, 'output/filtered_dsets/ERKunder40.rds')
 filt = filter_and_impute(diag, models=metab_d, 'num_days > 165')
 saveRDS(filt, 'output/filtered_dsets/daysOver165.rds')
 filt = filter_and_impute(diag, models=metab_d, 'num_days > 250')
+saveRDS(filt, 'output/filtered_dsets/daysOver250.rds')
 filt = filter_and_impute(diag, models=metab_d, 'num_days > 165', 'ER_K < 0.6')
+saveRDS(filt, 'output/filtered_dsets/daysOver165_ERKunder60.rds')
 filt = filter_and_impute(diag, models=metab_d, 'num_days > 165', 'ER_K < 0.4')
-filt = filter_and_impute(diag, models=metab_d, 'num_days > 250', 'ER_K < 0.6')
-filt = filter_and_impute(diag, models=metab_d, 'num_days > 250', 'ER_K < 0.4')
 saveRDS(filt, 'output/filtered_dsets/daysOver165_ERKunder40.rds')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 250', 'ER_K < 0.6')
+saveRDS(filt, 'output/filtered_dsets/daysOver250_ERKunder60.rds')
+filt = filter_and_impute(diag, models=metab_d, 'num_days > 250', 'ER_K < 0.4')
+saveRDS(filt, 'output/filtered_dsets/daysOver250_ERKunder40.rds')
 
 filt = readRDS('output/filtered_dsets/daysOver165_ERKunder40.rds')
 
 smry = consolidate_list(filt) %>%
     as_tibble() %>%
     group_by(DOY) %>%
-    summarize_all(median=median(., na.rm=TRUE))
+    summarize_all(list(median=~median(., na.rm=TRUE),
+        quant25=~quantile(.)[2], quant75=~quantile(.)[4]))
 
+#lips plots ####
+
+pdf(file='output/lips_daysOver165_ERKunder40.pdf', width=12, height=7)
+
+par(mfrow=c(2, 1), mar=c(0, 3, 1, 2), oma=c(0, 1, 0, 0))
+
+gpplim = c(0, max(smry$GPP_C_filled_quant75, na.rm=TRUE))
+plot(smry$DOY, smry$GPP_C_filled_median, ylab='', yaxs='i', type='l',
+    bty='n', lwd=2, xlab='', ylim=gpplim, xaxs='i', xaxt='n', yaxt='n')
+polygon(x=c(smry$DOY, rev(smry$DOY)),
+    y=c(smry$GPP_C_filled_quant25, rev(smry$GPP_C_filled_quant75)),
+    border=NA, col=alpha('red', alpha=0.6))
+axis(2, las=2, line=0, xpd=NA, at=round(seq(0, gpplim[2], length.out=5), 1))
+mtext(expression(paste("GPP (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
+abline(h=0, lty=1, lwd=2, col='gray60')
+legend('topright', legend='> 165 days; ER * K < 0.4', bty='n')
+
+par(mar=c(4, 3, 0, 1))
+
+erlim = c(min(smry$ER_C_filled_quant25, na.rm=TRUE), 0)
+plot(smry$DOY, smry$ER_C_filled_median, ylab='', yaxs='i', type='l',
+    bty='n', lwd=2, xlab='', ylim=erlim, xaxs='i', xaxt='n', yaxt='n')
+polygon(x=c(smry$DOY, rev(smry$DOY)),
+    y=c(smry$ER_C_filled_quant25, rev(smry$ER_C_filled_quant75)),
+    border=NA, col=alpha('blue', alpha=0.6))
+axis(2, las=2, line=0, at=round(seq(0, erlim[1], length.out=5), 1))
+axis(1, line=0, at=seq(0, max(smry$DOY), 30))
+mtext(expression(paste("ER (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
+mtext('DOY', side=1, line=2.5)
+
+dev.off()

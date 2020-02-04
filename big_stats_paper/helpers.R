@@ -202,3 +202,23 @@ consolidate_list = function(daily_summaries){
 
     return(smry)
 }
+
+phil_to_mike_format = function(dset, mod_dset){
+
+    nwis_ind = substr(dset$Site_ID, 1, 4) == 'nwis'
+    dset$Site_ID[nwis_ind] = gsub('_', '-', dset$Site_ID[nwis_ind])
+    dset$site = unname(sapply(dset$Site_ID, function(x) strsplit(x, '_')[[1]][2]))
+    dset$site[is.na(dset$site)] = dset$Site_ID[is.na(dset$site)]
+    dset$Site_ID = NULL
+
+    #join region column from model outputs (which for streampulse == US state)
+    dset = dset %>%
+        left_join(mod_dset, 'site') %>%
+        mutate(sitecode=paste(region, site, sep='_')) %>%
+        filter(! is.na(Name)) %>%
+        select(-year) %>%
+        distinct() %>%
+        arrange(sitecode)
+
+    return(dset)
+}
