@@ -27,6 +27,7 @@ metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds')) %>%
     arrange(desc(ann_GPP_C))
 ws_metr = as_tibble(readRDS('phil_stuff/output/metrics_bound.rds'))
 ws_metr = phil_to_mike_format(ws_metr, mods)
+ws_metr = select(ws_metr, -Source, -Lat, -Lon, -VPU, -site, -region, -COMID, -Name)
 # filled = readRDS('phil_stuff/output/synthesis_gap_filled.rds')
 
 #subset of streampulse + powell sites used in this analysis
@@ -141,6 +142,8 @@ sites = sites[! duplicated(sites$sitecode),]
 sites = arrange(sites, region, sitecode)
 
 #bind Phil's StreamCat dataset ####
+sites = left_join(sites, ws_metr, by='sitecode')
+sites = sites[! duplicated(sites$sitecode),]
 
 #generate/retrieve watershed boundaries ####
 
@@ -287,7 +290,7 @@ gpp_er_biplot = function(mods, outfile){
     errtypes = errmods = errs = list()
 
     pdf(file=outfile, onefile=TRUE)
-    par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 1, 1, 1))
+    par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 2, 1, 1))
 
     for(i in 1:nrow(mods)){
 
@@ -309,6 +312,16 @@ gpp_er_biplot = function(mods, outfile){
             errs = append(errs, 'NA')
         }
 
+        er_vals = res$predictions$ER
+        er_vals[er_vals > 0] = NA
+        er_vals = gO2_to_gC(er_vals, PQ=1.25)
+        er_vals = temp20_std(er_vals)
+        res$predictions$ER = er_vals * -1
+        gpp_vals = res$predictions$GPP
+        gpp_vals[gpp_vals < 0] = NA
+        res$predictions$GPP = gO2_to_gC(gpp_vals, PQ=1.25)
+        n_days = sum(complete.cases(res$predictions[, c('GPP', 'ER')]))
+
         tryCatch({
 
             mout = lm(res$predictions$ER ~ res$predictions$GPP)
@@ -317,15 +330,25 @@ gpp_er_biplot = function(mods, outfile){
             icept = sprintf('%+.2f', coeffs[1])
             icept = paste(substr(icept, 0, 1), substr(icept, 2, nchar(icept)))
             coeff_lab = paste0('y = ', coeffs[2], 'x ', icept, ' (Adj. R^2: ',
-                round(mres$adj.r.squared, 2), ')')
+                round(mres$adj.r.squared, 2), '; n days: ', n_days, ')')
 
             # plot(res$predictions$GPP, res$predictions$ER, main=m$sitecode,
             plot(res$predictions$GPP, res$predictions$ER, main='', xlab='GPP',
-                ylab='ER', bty='l', col=alpha('gray30', 0.7), pch=20)
+                ylab='ER', bty='l', col=alpha('gray30', 0.7), pch=20,
+                xaxt='n', yaxt='n')
+            axis(1, tck=-.02, labels=FALSE)
+            axis(1, tcl=0, col='transparent', line=-0.5)
+            axis(2, tck=-.02, labels=FALSE)
+            axis(2, tcl=0, col='transparent', line=-0.5)
             abline(mout, lty=2, col='red', lwd=2)
             mtext(paste0(m$sitecode, ' (', m$year, ')\n', coeff_lab),
                 side=3, line=0, cex=0.7)
-
+            if(cnt %% 9 == 0){
+                mtext(expression(paste(GPP[20]~"(gC"~"m"^"-2"~" d"^"-1"*')')),
+                    side=1, outer=TRUE)
+                mtext(expression(paste(ER[20]~"(gC"~"m"^"-2"~" d"^"-1"*')')),
+                    side=2, outer=TRUE)
+            }
 
         }, error=function(e){
                 errtypes = append(errtypes, 'plot/stat_err')

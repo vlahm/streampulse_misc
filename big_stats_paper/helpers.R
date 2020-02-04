@@ -222,3 +222,14 @@ phil_to_mike_format = function(dset, mod_dset){
 
     return(dset)
 }
+
+gO2_to_gC = function(x, PQ){
+    x = x * (1 / (2 * 15.9994)) * (1 / PQ) * 12.0107
+    return(x)
+}
+
+temp20_std = function(x){
+    R = R20 * 1.047 ^ (T - 20)
+    SOLVE FOR R20!
+    return(x)
+}
