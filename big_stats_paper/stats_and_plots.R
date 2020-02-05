@@ -23,6 +23,8 @@ mods = query_available_results('all')[[1]] %>%
 #datasets from Phil
 metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
 diag = as_tibble(readRDS('phil_stuff/metab_synthesis/output/yearly_diagnostics.rds'))
+diag = filter(diag, ! is.na(ER_K))
+diag$ER_K = abs(diag$ER_K)
 metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds')) %>%
     arrange(desc(ann_GPP_C))
 ws_metr = as_tibble(readRDS('phil_stuff/output/metrics_bound.rds'))
@@ -315,11 +317,19 @@ gpp_er_biplot = function(mods, outfile){
         er_vals = res$predictions$ER
         er_vals[er_vals > 0] = NA
         er_vals = gO2_to_gC(er_vals, PQ=1.25)
-        er_vals = temp20_std(er_vals)
         res$predictions$ER = er_vals * -1
+        # daily_mean_temp = res$model_results$data %>%
+        #     group_by(date) %>%
+        #     summarize_at(vars(one_of('temp.water')), list(~mean(., na.rm=TRUE))) %>%
+        #     ungroup() %>%
+        #     right_join(select(res$predictions, date), by='date') %>%
+        #     pull(temp.water)
+        # res$predictions$ER = temp20_std(er_vals, daily_mean_temp)
+
         gpp_vals = res$predictions$GPP
         gpp_vals[gpp_vals < 0] = NA
         res$predictions$GPP = gO2_to_gC(gpp_vals, PQ=1.25)
+
         n_days = sum(complete.cases(res$predictions[, c('GPP', 'ER')]))
 
         tryCatch({
@@ -330,7 +340,7 @@ gpp_er_biplot = function(mods, outfile){
             icept = sprintf('%+.2f', coeffs[1])
             icept = paste(substr(icept, 0, 1), substr(icept, 2, nchar(icept)))
             coeff_lab = paste0('y = ', coeffs[2], 'x ', icept, ' (Adj. R^2: ',
-                round(mres$adj.r.squared, 2), '; n days: ', n_days, ')')
+                round(mres$adj.r.squared, 2), ')')
 
             # plot(res$predictions$GPP, res$predictions$ER, main=m$sitecode,
             plot(res$predictions$GPP, res$predictions$ER, main='', xlab='GPP',
@@ -341,7 +351,8 @@ gpp_er_biplot = function(mods, outfile){
             axis(2, tck=-.02, labels=FALSE)
             axis(2, tcl=0, col='transparent', line=-0.5)
             abline(mout, lty=2, col='red', lwd=2)
-            mtext(paste0(m$sitecode, ' (', m$year, ')\n', coeff_lab),
+            mtext(paste0(m$sitecode, ' (', m$year, '; n days: ', n_days,
+                ')\n', coeff_lab),
                 side=3, line=0, cex=0.7)
             if(cnt %% 9 == 0){
                 mtext(expression(paste(GPP[20]~"(gC"~"m"^"-2"~" d"^"-1"*')')),
@@ -400,9 +411,34 @@ ts_plot = function(mods, outfile, with_K){
             errs2 = append(errs2, 'NA')
         }
 
+        res$predictions$ER[res$predictions$ER > 0] = NA
+        res$predictions$GPP[res$predictions$GPP < 0] = NA
+        n_days = sum(complete.cases(res$predictions[, c('GPP', 'ER')]))
+
         tryCatch({
 
-            o = res$model_results$fit$daily
+            o = select(res$model_results$fit$daily, date, ER_daily_mean,
+                ER_daily_2.5pct, ER_daily_97.5pct, GPP_daily_mean,
+                GPP_daily_2.5pct, GPP_daily_97.5pct, K600_daily_mean,
+                K600_daily_2.5pct, K600_daily_97.5pct)
+
+            bogus_bool = o$ER_daily_mean > 0 | o$GPP_daily_mean < 0
+            bogus_bool[is.na(bogus_bool)] = TRUE
+            o[bogus_bool, -1] = rep(NA, ncol(o) - 1)
+            o$ER_daily_mean = gO2_to_gC(o$ER_daily_mean, PQ=1.25)
+            o$ER_daily_2.5pct = gO2_to_gC(o$ER_daily_2.5pct, PQ=1.25)
+            o$ER_daily_97.5pct = gO2_to_gC(o$ER_daily_97.5pct, PQ=1.25)
+            # daily_mean_temp = res$model_results$data %>%
+            #     group_by(date) %>%
+            #     summarize_at(vars(one_of('temp.water')), list(~mean(., na.rm=TRUE))) %>%
+            #     ungroup() %>%
+            #     right_join(select(res$predictions, date), by='date') %>%
+            #     pull(temp.water)
+            # res$predictions$ER = temp20_std(er_vals, daily_mean_temp)
+
+            o$GPP_daily_mean = gO2_to_gC(o$GPP_daily_mean, PQ=1.25)
+            o$GPP_daily_2.5pct = gO2_to_gC(o$GPP_daily_2.5pct, PQ=1.25)
+            o$GPP_daily_97.5pct = gO2_to_gC(o$GPP_daily_97.5pct, PQ=1.25)
 
             llim = min(c(o$GPP_daily_2.5pct, o$ER_daily_2.5pct), na.rm=TRUE)
             ulim = max(c(o$GPP_daily_97.5pct, o$ER_daily_97.5pct), na.rm=TRUE)
@@ -410,9 +446,9 @@ ts_plot = function(mods, outfile, with_K){
             fulldateseq = seq(as.Date(paste0(m$year, '-01-01')),
                 as.Date(paste0(m$year, '-12-31')), by='day')
             o = left_join(tibble(date=fulldateseq), o)
-            plot(o$date, o$GPP_daily_mean, type='l', col='red', xlab='', las=0,
-                ylab='', xaxs='i', yaxs='i', ylim=c(llim, ulim), bty='l', yaxt='n',
-                xaxt='n')
+            plot(o$date, o$GPP_daily_mean, type='l', col='forestgreen', xlab='',
+                las=0, ylab='', xaxs='i', yaxs='i', ylim=c(llim, ulim), bty='l',
+                yaxt='n', xaxt='n')
             month_starts = o$date[substr(o$date, 9, 10) == '01']
             # all_month_starts_abb = paste0(sprintf('%02d', 1:12), '-01')
             # which_starts = all_month_starts_abb %in% substr(month_starts, 6, 10)
@@ -420,9 +456,10 @@ ts_plot = function(mods, outfile, with_K){
                 cex.axis=0.6)
             axis(2, tck=-.02, labels=FALSE)
             axis(2, tcl=0, col='transparent', line=-0.5)
-            mtext(paste0(m$sitecode, ' (', m$year, ')'), side=3, line=0, cex=0.7)
-            lines(o$date, o$ER_daily_mean, col='blue')
-            mtext(expression(paste("g"~O[2]~"m"^"-2"~" d"^"-1")), side=2,
+            mtext(paste0(m$sitecode, ' (', m$year, '; n days: ', n_days, ')'),
+                side=3, line=0, cex=0.7)
+            lines(o$date, o$ER_daily_mean, col='sienna')
+            mtext(expression(paste("gC"~"m"^"-2"~" d"^"-1")), side=2,
                 line=1.5, font=2, cex=0.7)
 
             rl = rle(is.na(o$GPP_daily_2.5pct))
@@ -432,15 +469,15 @@ ts_plot = function(mods, outfile, with_K){
             chunks = split(o, chunkfac)
             noNAchunks = lapply(chunks, function(x) x[!is.na(x$GPP_daily_2.5pct),] )
 
-            for(i in 1:length(noNAchunks)){
-                polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-                    y=c(noNAchunks[[i]]$GPP_daily_2.5pct,
-                        rev(noNAchunks[[i]]$GPP_daily_97.5pct)),
-                    col=adjustcolor('red', alpha.f=0.3), border=NA)
-                polygon(x=c(noNAchunks[[i]]$date, rev(noNAchunks[[i]]$date)),
-                    y=c(noNAchunks[[i]]$ER_daily_2.5pct,
-                        rev(noNAchunks[[i]]$ER_daily_97.5pct)),
-                    col=adjustcolor('blue', alpha.f=0.3), border=NA)
+            for(j in 1:length(noNAchunks)){
+                polygon(x=c(noNAchunks[[j]]$date, rev(noNAchunks[[j]]$date)),
+                    y=c(noNAchunks[[j]]$GPP_daily_2.5pct,
+                        rev(noNAchunks[[j]]$GPP_daily_97.5pct)),
+                    col=adjustcolor('forestgreen', alpha.f=0.3), border=NA)
+                polygon(x=c(noNAchunks[[j]]$date, rev(noNAchunks[[j]]$date)),
+                    y=c(noNAchunks[[j]]$ER_daily_2.5pct,
+                        rev(noNAchunks[[j]]$ER_daily_97.5pct)),
+                    col=adjustcolor('sienna', alpha.f=0.3), border=NA)
             }
 
             abline(h=0, lty=3, col='gray50')
@@ -448,11 +485,15 @@ ts_plot = function(mods, outfile, with_K){
             if(with_K){
 
                 par(new=TRUE)
-                llim2 = min(o$K600_daily_2.5pct, na.rm=TRUE)
-                ulim2 = max(o$K600_daily_97.5pct, na.rm=TRUE)
-                plot(o$date, o$K600_daily_mean, col='orange',
+                # llim2 = min(o$K600_daily_2.5pct, na.rm=TRUE)
+                # ulim2 = max(o$K600_daily_97.5pct, na.rm=TRUE)
+                ylims = range(o$K600_daily_mean, na.rm=TRUE)
+                ylim_expansion = ylims[2] - mean(ylims)
+                ylims = c(ylims[1] - ylim_expansion, ylims[2] + ylim_expansion)
+                plot(o$date, o$K600_daily_mean, col='black',
                     type='l', xlab='', las=0, ylab='', xaxs='i', yaxs='i',
-                    xaxt='n', bty='u', yaxt='n', ylim=c(llim2, ulim2))
+                    xaxt='n', bty='u', yaxt='n', ylim=ylims)
+                    # xaxt='n', bty='u', yaxt='n', ylim=c(llim2, ulim2))
                 axis(4, tck=-.02, labels=FALSE)
                 axis(4, tcl=0, col='transparent', line=-0.5, las=1)
                 mtext(expression(paste('K600 (d'^'-1' * ')')), side=4, line=2,
@@ -464,7 +505,6 @@ ts_plot = function(mods, outfile, with_K){
                 #         col=adjustcolor('orange', alpha.f=0.3), border=NA)
                 # }
             }
-
 
         }, error=function(e){
                 errtypes2 = append(errtypes2, 'plot/stat_err')
@@ -481,54 +521,86 @@ ts_plot = function(mods, outfile, with_K){
     return(list(errtypes=errtypes2, errmosd=errmods2, errs=errs2))
 }
 
+dist_plot = function(m, outfile){
+
+    pdf(file=outfile, width=12, height=7)
+
+    par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+    seq500 = seq(500, 3000, 500)
+
+    plot(m$ann_GPP_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+    segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_GPP_C, lwd=3,
+        lend=2, col='forestgreen')
+    axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
+    axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
+    mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
+        side=2, line=2)
+
+    par(mar=c(3, 3, 0, 1))
+
+    plot(m$ann_ER_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+    segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_ER_C, lwd=3,
+        lend=2, col='sienna')
+    axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
+    axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
+        tcl=0, col='white', lwd=2)
+    mtext(expression(paste("Mean annual ER (gC"~"m"^"-2"~" d"^"-1"*')')),
+        side=2, line=2)
+
+    dev.off()
+}
+
+er_k_filter_plot = function(diagnostics, outfile){
+
+    pdf(file=outfile, width=7, height=6)
+
+    r2_seq = seq(1, 0.05, -0.05)
+    unfilt_sites = rep(NA, length(r2_seq))
+
+    for(i in 1:length(r2_seq)){
+        unfilt_sites[i] = nrow(filter(diagnostics, ER_K < !!(r2_seq[i])))
+    }
+
+    plot(rev(r2_seq), unfilt_sites, ylab='Modeled Siteyears',
+        xlab=expression(paste('Maximum |R'^2 * '|')), xaxt='n', yaxt='n')
+    xseq = seq(0.1, 1, 0.1)
+    axis(1, at=xseq - 0.05, labels=rev(xseq))
+    axis(2, cex.axis=0.8)
+
+    dev.off()
+}
+
 #plots ####
 gpp_er_biplot(spmods, 'output/gppXer_sp.pdf')
-gpp_er_biplot(powmods, 'output/_gppXer_powell.pdf')
-ts_plot(spmods, 'output/metab_ts_sp_noK.pdf', FALSE)
-ts_plot(powmods, 'output/metab_ts_powell_noK.pdf', FALSE)
+gpp_er_biplot(powmods, 'output/gppXer_powell.pdf')
+# ts_plot(spmods, 'output/metab_ts_sp_noK.pdf', FALSE)
+# ts_plot(powmods, 'output/metab_ts_powell_noK.pdf', FALSE)
 ts_plot(spmods, 'output/metab_ts_sp.pdf', TRUE)
 ts_plot(powmods, 'output/metab_ts_powell.pdf', TRUE)
-
-# barplot(metr$ann_GPP_C, ylab='', yaxt='n', yaxs='i',
-#     width=0.03, space=0.5, xlim=c(0, 10))
-# axis(2, las=2, line=-1.8, at=seq500)
-# axis(2, las=2, line=-1.8, at=seq500,
-#     tcl=0, col='white', lwd=2)
-# mtext('Mean annual GPP (C)', side=2, line=2)
-
-pdf(file='output/metab_dist.pdf', width=12, height=7)
-
-par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
-seq500 = seq(500, 3000, 500)
-
-plot(metr$ann_GPP_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
-segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_GPP_C, lwd=3,
-    lend=2)
-axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
-axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
-mtext(expression(paste("Mean annual GPP (g"~O[2]~"m"^"-2"~" d"^"-1"*')')),
-    side=2, line=2)
-
-par(mar=c(3, 3, 0, 1))
-
-plot(metr$ann_ER_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
-segments(x0=1:nrow(metr), y0=rep(0, nrow(metr)), y1=metr$ann_ER_C, lwd=3,
-    lend=2, col='gray50')
-axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
-axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
-    tcl=0, col='white', lwd=2)
-mtext(expression(paste("Mean annual ER (g"~O[2]~"m"^"-2"~" d"^"-1"*')')),
-    side=2, line=2)
-
-dev.off()
-
+dist_plot(metr, 'output/metab_dist.pdf')
+er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
 
 #apply Philters and gapPhills; generate sub-datasets ####
 
-filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.6')
-saveRDS(filt, 'output/filtered_dsets/ERKunder60.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.1')
+saveRDS(filt, 'output/filtered_dsets/ERKunder10.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.2')
+saveRDS(filt, 'output/filtered_dsets/ERKunder20.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.3')
+saveRDS(filt, 'output/filtered_dsets/ERKunder30.rds')
 filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.4')
 saveRDS(filt, 'output/filtered_dsets/ERKunder40.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.5')
+saveRDS(filt, 'output/filtered_dsets/ERKunder50.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.6')
+saveRDS(filt, 'output/filtered_dsets/ERKunder60.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.7')
+saveRDS(filt, 'output/filtered_dsets/ERKunder70.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.8')
+saveRDS(filt, 'output/filtered_dsets/ERKunder80.rds')
+filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.9')
+saveRDS(filt, 'output/filtered_dsets/ERKunder90.rds')
+
 filt = filter_and_impute(diag, models=metab_d, 'num_days > 165')
 saveRDS(filt, 'output/filtered_dsets/daysOver165.rds')
 filt = filter_and_impute(diag, models=metab_d, 'num_days > 250')

@@ -228,8 +228,9 @@ gO2_to_gC = function(x, PQ){
     return(x)
 }
 
-temp20_std = function(x){
-    R = R20 * 1.047 ^ (T - 20)
-    SOLVE FOR R20!
-    return(x)
+temp20_std = function(resp, temp){
+    #resp = R20 * 1.047 ^ (temp - 20) #solving for R20 here
+    logterm = log(1.047)
+    R20 = exp(log(resp) / (logterm * temp - logterm * 20))
+    return(R20)
 }
