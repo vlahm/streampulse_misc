@@ -191,7 +191,7 @@ consolidate_list = function(daily_summaries){
 
     daily_summaries = Map(function(x){
         if(is.null(x)) return()
-        x = select(x, DOY, GPP_C_filled, ER_C_filled)
+        x = select(x, DOY, GPP_C_filled, ER_C_filled, NEP_C_filled)
         return(x)
     }, daily_summaries)
 
@@ -215,7 +215,7 @@ phil_to_mike_format = function(dset, mod_dset){
     dset = dset %>%
         left_join(mod_dset, 'site') %>%
         mutate(sitecode=paste(region, site, sep='_')) %>%
-        filter(! is.na(Name)) %>%
+        filter(! is.na(sitecode)) %>%
         select(-year) %>%
         distinct() %>%
         arrange(sitecode)
