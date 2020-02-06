@@ -25,3 +25,5 @@ add bool erXk < 0.05 to diag df; add filter arg for that
 
 using phil's streamcat metrics, the areal correction factor is probably not being applied
     use my own metrics
+
+wtf is going wrong with phil's functions?
