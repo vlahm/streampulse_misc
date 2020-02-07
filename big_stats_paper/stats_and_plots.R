@@ -17,17 +17,17 @@ phil_srcs = list.files('phil_stuff/metab_synthesis/R/functions/',
     full.names=TRUE)
 for(x in phil_srcs) source(x)
 
-# model results from streampulse portal
-mods = query_available_results('all')[[1]] %>%
-    as_tibble() %>%
-    mutate_all(as.character)
+# # model results from streampulse portal
+# mods = query_available_results('all')[[1]] %>%
+#     as_tibble() %>%
+#     mutate_all(as.character)
 
 #datasets from Phil
 metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
-# metab_d = metab_d[! grepl('nwis', names(metab_d))]
-names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
-        arrange=FALSE) %>%
-    pull(sitecode)
+metab_d = metab_d[! grepl('nwis', names(metab_d))]
+# names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
+#         arrange=FALSE) %>%
+#     pull(sitecode)
 erXk_p_vals = sapply(metab_d, function(x){
     summary(lm(x$ER~x$K600))$coefficients[2,4]
 })
@@ -35,19 +35,19 @@ erXk_p_vals = tibble(sitecode=names(erXk_p_vals), er_k_pval=erXk_p_vals)
 diag = as_tibble(readRDS('phil_stuff/metab_synthesis/output/yearly_diagnostics.rds'))
 diag = filter(diag, ! is.na(ER_K))
 diag$ER_K = abs(diag$ER_K)
-diag = phil_to_mike_format(diag, mods) %>%
-    select(-site, -region)
-# diag = filter(diag, ! grepl('nwis', Site_ID)) %>%
-    # rename(sitecode=Site_ID)
+# diag = phil_to_mike_format(diag, mods) %>%
+#     select(-site, -region)
+diag = filter(diag, ! grepl('nwis', Site_ID)) %>%
+rename(sitecode=Site_ID)
 metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds'))
 metr = readRDS('phil_stuff/output/metrics_bound.rds') %>%
     select(-one_of('Name', 'Source', 'Lat', 'Lon', 'COMID', 'VPU')) %>%
     as_tibble() %>%
     left_join(metr, by='Site_ID')
-metr = phil_to_mike_format(metr, mods) %>%
-    select(-site, -region)
-# metr = filter(metr, ! grepl('nwis', Site_ID)) %>%
-#     rename(sitecode=Site_ID)
+# metr = phil_to_mike_format(metr, mods) %>%
+#     select(-site, -region)
+metr = filter(metr, ! grepl('nwis', Site_ID)) %>%
+    rename(sitecode=Site_ID)
 
 metr = diag %>%
     group_by(sitecode) %>%
@@ -58,12 +58,12 @@ metr = diag %>%
     left_join(erXk_p_vals, by='sitecode') %>%
     select(-ER_K, -GPP_neg, -ER_pos, -num_days, -er_k_pval, everything())
 
-mods = mutate(mods, sitecode=paste(region, site, sep='_'))
+# mods = mutate(mods, sitecode=paste(region, site, sep='_'))
 
 #subset of streampulse + powell sites used in this analysis
-sites = as_tibble(readRDS('sites_COMID.rds'))
-sites = phil_to_mike_format(sites, mods)
-    # rename(sitecode=Site_ID)
+sites = as_tibble(readRDS('sites_COMID.rds')) %>%
+# sites = phil_to_mike_format(sites, mods)
+    rename(sitecode=Site_ID)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
 
@@ -628,13 +628,18 @@ ts_plot = function(mods, outfile, with_K){
     return(list(errtypes=errtypes2, errmosd=errmods2, errs=errs2))
 }
 
-dist_plot = function(m, outfile){
+dist_plot = function(m, outfile, plot_comm_resp=FALSE){
 
     m = arrange(m, desc(ann_GPP_C))
 
     pdf(file=outfile, width=12, height=7)
 
-    par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+    if(plot_comm_resp){
+        par(mfrow=c(3, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+    } else {
+        par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+    }
+
     seq500 = seq(500, 3000, 500)
 
     plot(m$ann_GPP_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
@@ -655,6 +660,21 @@ dist_plot = function(m, outfile){
         tcl=0, col='white', lwd=2)
     mtext(expression(paste("Mean annual ER (gC"~"m"^"-2"~" d"^"-1"*')')),
         side=2, line=2)
+
+    if(plot_comm_resp){
+        comm_resp = m$ann_ER_C - m$ann_GPP_C
+        plot(rev(sort(comm_resp, na.last=FALSE)), ylab='', yaxt='n', yaxs='i',
+            type='n', bty='n', xaxt='n')
+        segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=comm_resp, lwd=3,
+            lend=2, col='black')
+        axis(2, las=2, line=-1.8)
+        axis(2, las=2, line=-1.8,
+        # axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
+        # axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
+            tcl=0, col='white', lwd=2)
+        mtext(expression(paste("Mean annual CR (gC"~"m"^"-2"~" d"^"-1"*')')),
+            side=2, line=2)
+    }
 
     dev.off()
 }
@@ -679,11 +699,6 @@ er_k_filter_plot = function(diagnostics, outfile){
     dev.off()
 }
 
-# sitedata=sites; quant_filt='width_calc > 0.25'
-
-# readfile='placeholder'; datlist=upper75; diagnostics=diagnostics;
-# sitedata=upper75sitedata; quant_filt=paste(split_vars[2], '> 0.75');
-# standalone=FALSE; outfile='placeholder'
 lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     standalone, outfile, ...){
 
@@ -777,12 +792,6 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     }
 }
 
-# split_vars = c('width_calc', 'BFIWs')
-# diagnostics = diag; sitedata=sites
-#readfile='output/filtered_dsets/no_filter.rds'
-# readfile='output/filtered_dsets/daysOver165_ERKunder40.rds'
-# readfile='output/filtered_dsets/no_filter.rds'; diagnostics=diag; sitedata=sites
-# split_vars=c('width_calc', 'BFIWs'); outfile='output/lipset_width_bfi.pdf'
 lips_facet = function(readfile, diagnostics, sitedata, split_vars,
     outfile, ...){
 
@@ -893,31 +902,76 @@ lips_facet = function(readfile, diagnostics, sitedata, split_vars,
     dev.off()
 }
 
-light_gpp_biplot = function(sitedata, outfile){
-
-    s = select(sitedata, Stream_PAR_sum, ann_GPP_C, Disch_ar1) %>%
-        filter_at(vars(Stream_PAR_sum, ann_GPP_C, Disch_ar1),
-            all_vars(! is.na(.)))
-
-    cols = brewer.pal(9, 'Blues')[2:9]
-    colfac = cut(s$Disch_ar1, 8)
-    levels(colfac) = cols
+light_gpp_biplot = function(sitedata, outfile, colvar, quantvar=NULL,
+        xl, xr, yb, yt, txt_x, txt_y){
 
     pdf(file=outfile, width=8, height=8)
-    par(mar=c(4, 4, 1, 1))
 
-    plot(s$Stream_PAR_sum, s$ann_GPP_C, col=as.character(colfac),
-        xlab='', ylab='')
-    mtext(expression(paste('Mean Annual GPP (gC'~'m'^'-2'~' d'^'-1'*')')),
-        side=2, line=2.5)
-    mtext('Mean Annual Stream PAR', side=1, line=2.5)
+    if(! is.null(quantvar)){
 
-    qrng = round(range(s$Disch_ar1, na.rm=TRUE), 2)
-    color.legend(xl=2, xr=2.5, yb=2400, yt=2900, align='rb', pos=4, offset=0.2,
-        rect.col=cols, gradient='y', legend=c(qrng[1], qrng[2]), cex=0.9)
-    text('AR-1 of Mean Annual', x=2, y=3170, pos=4, offset=0, cex=0.9)
-    text(expression(paste('Discharge (m'^3 * 's)')),
-        x=2, y=3030, pos=4, offset=0, cex=0.9)
+        s = select(sitedata, sitecode, Stream_PAR_sum, ann_GPP_C,
+                one_of(quantvar, colvar)) %>%
+            filter_at(vars(sitecode, Stream_PAR_sum, ann_GPP_C,
+                one_of(quantvar, colvar)),
+                all_vars(! is.na(.)))
+
+        colvar_rng = round(range(s[[colvar]], na.rm=TRUE), 2)
+        cols = brewer.pal(9, 'Blues')[2:9]
+        colfac = cut(s[[colvar]], 8)
+        levels(colfac) = cols
+
+        qfs = quantile(sitedata[[quantvar]], na.rm=TRUE,
+            probs=c(0.25, 0.75))
+        upquant_ind = s[[quantvar]] > qfs[2]
+        dnquant_ind = s[[quantvar]] < qfs[1]
+        s_up = s[upquant_ind, ]
+        s_dn = s[dnquant_ind, ]
+        cols_up = as.character(colfac[upquant_ind])
+        cols_dn = as.character(colfac[dnquant_ind])
+
+        par(mfrow=c(2, 1), mar=c(4, 1, 1, 1), oma=c(0, 4, 0, 0))
+
+        plot(s_up$Stream_PAR_sum, s_up$ann_GPP_C, col=cols_up, xlab='', ylab='',
+            main=paste('Site filter:', quantvar, '> 75th pctile'))
+        color.legend(xl=xl, xr=xr, yb=yb, yt=yt, align='rb', pos=4, offset=0.2,
+            # color.legend(xl=2, xr=2.5, yb=2400, yt=2900, align='rb', pos=4, offset=0.2,
+            rect.col=cols, gradient='y', legend=c(colvar_rng[1], colvar_rng[2]),
+            cex=0.9)
+        text(colvar, x=txt_x, y=txt_y, pos=4, offset=0, cex=0.9)
+        # text('AR-1 of Mean Annual', x=2, y=3170, pos=4, offset=0, cex=0.9)
+        # text(expression(paste('Discharge (m'^3 * 's)')),
+        #     x=2, y=3030, pos=4, offset=0, cex=0.9)
+        plot(s_dn$Stream_PAR_sum, s_dn$ann_GPP_C, col=cols_dn, xlab='', ylab='',
+            main=paste('Site filter:', quantvar, '< 25th pctile'))
+        mtext(expression(paste('Mean Annual GPP (gC'~'m'^'-2'~' d'^'-1'*')')),
+            side=2, line=2.5, outer=TRUE)
+        mtext('Mean Annual Stream PAR', side=1, line=2.5)
+
+    } else {
+
+        par(mar=c(4, 4, 1, 1))
+
+        s = select(sitedata, Stream_PAR_sum, ann_GPP_C, one_of(colvar)) %>%
+            filter_at(vars(Stream_PAR_sum, ann_GPP_C, one_of(colvar)),
+                all_vars(! is.na(.)))
+
+        colvar_rng = round(range(s[[colvar]], na.rm=TRUE), 2)
+        cols = brewer.pal(9, 'Blues')[2:9]
+        colfac = cut(s[[colvar]], 8)
+        levels(colfac) = cols
+
+        plot(s$Stream_PAR_sum, s$ann_GPP_C, xlab='', ylab='',
+            col=as.character(colfac))
+        text(colvar, x=txt_x, y=txt_y, pos=4, offset=0, cex=0.9)
+        mtext(expression(paste('Mean Annual Stream GPP (gC'~'m'^'-2'~' d'^'-1'*')')),
+            side=2, line=2.5)
+        mtext('Mean Annual Stream PAR', side=1, line=2.5)
+
+        colvar_rng = round(range(s[[colvar]], na.rm=TRUE), 2)
+        color.legend(xl=xl, xr=xr, yb=yb, yt=yt, align='rb', pos=4, offset=0.2,
+            rect.col=cols, gradient='y', legend=c(colvar_rng[1], colvar_rng[2]),
+            cex=0.9)
+    }
 
     dev.off()
 }
@@ -947,6 +1001,52 @@ wtemp_er_biplot = function(sitedata, outfile, signif=TRUE){
     dev.off()
 }
 
+gpp_modis_stream_biplot = function(sitedata, outfile, quantvar=NULL){
+
+    pdf(file=outfile, width=8, height=8)
+    par(mar=c(4, 4, 1, 1))
+
+    if(! is.null(quantvar)){
+
+        s = select(sitedata, sitecode, MOD_ann_GPP, ann_GPP_C, one_of(quantvar)) %>%
+            filter_at(vars(sitecode, MOD_ann_GPP, ann_GPP_C, one_of(quantvar)),
+                all_vars(! is.na(.)))
+
+        qfs = quantile(sitedata[, quantvar, drop=TRUE], na.rm=TRUE,
+            probs=c(0.25, 0.75))
+        upper75 = sitedata %>%
+            filter_(paste(quantvar, '>', qfs[2])) %>%
+            pull(sitecode)
+        lower25 = sitedata %>%
+            filter_(paste(quantvar, '<', qfs[1])) %>%
+            pull(sitecode)
+
+        s_up = filter(s, sitecode %in% upper75)
+        s_dn = filter(s, sitecode %in% lower25)
+
+        par(mfrow=c(2, 1), mar=c(4, 1, 1, 1), oma=c(0, 4, 0, 0))
+        plot(s_up$MOD_ann_GPP, s_up$ann_GPP_C, xlab='', ylab='',
+            main=paste('Site filter:', quantvar, '> 75th pctile'))
+        plot(s_dn$MOD_ann_GPP, s_dn$ann_GPP_C, xlab='', ylab='',
+            main=paste('Site filter:', quantvar, '< 25th pctile'))
+        mtext(expression(paste('Mean Annual Stream GPP (gC'~'m'^'-2'~' d'^'-1'*')')),
+            side=2, line=2.5, outer=TRUE)
+        mtext('Mean Annual MODIS GPP', side=1, line=2.5)
+
+    } else {
+        s = select(sitedata, MOD_ann_GPP, ann_GPP_C) %>%
+            filter_at(vars(MOD_ann_GPP, ann_GPP_C),
+                all_vars(! is.na(.)))
+
+        plot(s$MOD_ann_GPP, s$ann_GPP_C, xlab='', ylab='')
+        mtext(expression(paste('Mean Annual Stream GPP (gC'~'m'^'-2'~' d'^'-1'*')')),
+            side=2, line=2.5)
+        mtext('Mean Annual MODIS GPP', side=1, line=2.5)
+    }
+
+    dev.off()
+}
+
 #plots ####
 
 gpp_er_biplot(spmods, 'output/gppXer_sp.pdf')
@@ -957,17 +1057,13 @@ ts_plot(spmods, 'output/metab_ts_sp.pdf', TRUE)
 ts_plot(powmods, 'output/metab_ts_powell.pdf', TRUE)
 dist_plot(metr, 'output/metab_dist.pdf')
 er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
-# lips_plot(readfile='output/filtered_dsets/daysOver165_ERKunder40.rds',
-#     diagnostics=diag, sitedata=sites, quant_filt=NULL,
-#     standalone=TRUE, outfile='output/lips_daysOver165_ERKunder40.pdf',
-#     '> 165 days', 'ER * K < 0.4')
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
     diagnostics=diag, sitedata=sites, quant_filt='width_calc <= 1',
     standalone=TRUE, outfile='output/lips_overall.pdf')
-# lips_plot(readfile='output/filtered_dsets/no_filter.rds',
-#     diagnostics=diag, sitedata=sites, quant_filt='width_calc < 0.25',
-#     standalone=TRUE, outfile='output/lips_widthUnder25.pdf')
-light_gpp_biplot(sites, 'output/parXgpp.pdf')
+light_gpp_biplot(sites, 'output/parXgpp2.pdf', colvar='Disch_ar1',
+    quantvar='Disch_ar1', xl=2, xr=2.5, yb=2400, yt=2900, txt_x=10, txt_y=3000)
+light_gpp_biplot(sites, 'output/parXgpp2.pdf', colvar='Disch_ar1',
+    quantvar=NULL, xl=10, xr=10.2, yb=2400, yt=2900, txt_x=10, txt_y=3000)
 wtemp_er_biplot(sites, 'output/wtempXer_signif.pdf', signif=TRUE)
 # wtemp_er_biplot(sites, 'output/wtempXer_nonsignif.pdf', signif=FALSE)
 lips_facet('output/filtered_dsets/no_filter.rds', diag, sites,
@@ -978,4 +1074,6 @@ lips_facet('output/filtered_dsets/ERKunder40.rds', diag, sites,
     c('width_calc', 'BFIWs'), 'output/lipset_ERKUnder40_width_bfi.pdf')
 lips_facet('output/filtered_dsets/daysOver165_ERKunder40.rds', diag, sites,
     c('width_calc', 'BFIWs'), 'output/lipset_daysOver165_ERKUnder40_width_bfi.pdf')
-
+gpp_modis_stream_biplot(sitedata=sites, outfile='output/modis_stream_biplot.pdf',
+    quantvar=NULL)
+gpp_modis_stream_biplot(sites, 'output/modis_stream_biplot_width.pdf', 'width_calc')
