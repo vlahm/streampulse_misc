@@ -203,7 +203,7 @@ consolidate_list = function(daily_summaries){
     return(smry)
 }
 
-phil_to_mike_format = function(dset, mod_dset){
+phil_to_mike_format = function(dset, mod_dset, arrange=TRUE){
 
     nwis_ind = substr(dset$Site_ID, 1, 4) == 'nwis'
     dset$Site_ID[nwis_ind] = gsub('_', '-', dset$Site_ID[nwis_ind])
@@ -217,8 +217,11 @@ phil_to_mike_format = function(dset, mod_dset){
         mutate(sitecode=paste(region, site, sep='_')) %>%
         filter(! is.na(sitecode)) %>%
         select(-year) %>%
-        distinct() %>%
-        arrange(sitecode)
+        distinct()
+
+    if(arrange){
+        dset = arrange(dset, sitecode)
+    }
 
     return(dset)
 }

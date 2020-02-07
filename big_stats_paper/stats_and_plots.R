@@ -17,14 +17,16 @@ phil_srcs = list.files('phil_stuff/metab_synthesis/R/functions/',
     full.names=TRUE)
 for(x in phil_srcs) source(x)
 
-#model results from streampulse portal
+# model results from streampulse portal
 mods = query_available_results('all')[[1]] %>%
     as_tibble() %>%
     mutate_all(as.character)
 
 #datasets from Phil
 metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
-names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods) %>%
+# metab_d = metab_d[! grepl('nwis', names(metab_d))]
+names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
+        arrange=FALSE) %>%
     pull(sitecode)
 erXk_p_vals = sapply(metab_d, function(x){
     summary(lm(x$ER~x$K600))$coefficients[2,4]
@@ -35,6 +37,8 @@ diag = filter(diag, ! is.na(ER_K))
 diag$ER_K = abs(diag$ER_K)
 diag = phil_to_mike_format(diag, mods) %>%
     select(-site, -region)
+# diag = filter(diag, ! grepl('nwis', Site_ID)) %>%
+    # rename(sitecode=Site_ID)
 metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds'))
 metr = readRDS('phil_stuff/output/metrics_bound.rds') %>%
     select(-one_of('Name', 'Source', 'Lat', 'Lon', 'COMID', 'VPU')) %>%
@@ -42,6 +46,9 @@ metr = readRDS('phil_stuff/output/metrics_bound.rds') %>%
     left_join(metr, by='Site_ID')
 metr = phil_to_mike_format(metr, mods) %>%
     select(-site, -region)
+# metr = filter(metr, ! grepl('nwis', Site_ID)) %>%
+#     rename(sitecode=Site_ID)
+
 metr = diag %>%
     group_by(sitecode) %>%
     summarize(ER_K=mean(ER_K, na.rm=TRUE), GPP_neg=mean(GPP_neg, na.rm=TRUE),
@@ -56,6 +63,7 @@ mods = mutate(mods, sitecode=paste(region, site, sep='_'))
 #subset of streampulse + powell sites used in this analysis
 sites = as_tibble(readRDS('sites_COMID.rds'))
 sites = phil_to_mike_format(sites, mods)
+    # rename(sitecode=Site_ID)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
 
@@ -347,10 +355,11 @@ powmods = filter(mods, Source == 'USGS (Powell Center)')
 #apply Philters and gapPhills; generate sub-datasets ####
 
 filt = filter_and_impute(diag, models=metab_d, 'ER_K <= 1')
+# sum(sapply(filt, function(x) ! is.null(x)))
 saveRDS(filt, 'output/filtered_dsets/no_filter.rds')
 
-filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.1')
-saveRDS(filt, 'output/filtered_dsets/ERKunder10.rds')
+# filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.1')
+# saveRDS(filt, 'output/filtered_dsets/ERKunder10.rds')
 filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.2')
 saveRDS(filt, 'output/filtered_dsets/ERKunder20.rds')
 filt = filter_and_impute(diag, models=metab_d, 'ER_K < 0.3')
@@ -685,10 +694,12 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
         filt = datlist
     }
 
+    nsites_included = sum(sapply(filt, nrow) != 0)
+
     var_quant_filt = NULL
     if(! is.null(quant_filt)){
         quant_comp = strsplit(quant_filt, ' ')[[1]]
-        qf = quantile(sitedata$width_calc, na.rm=TRUE,
+        qf = quantile(sitedata[, quant_comp[1], drop=TRUE], na.rm=TRUE,
             probs=as.numeric(quant_comp[3]))
         filt_sites = sitedata %>%
             filter_(paste(quant_comp[1], quant_comp[2], qf)) %>%
@@ -742,6 +753,7 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     legend('right', title='Cumulative\nMedian Sums', bty='n',
         legend=c(paste('GPP:', medsums[1]), paste('ER:', medsums[2]),
             paste('NEP:', medsums[3])), title.col='gray30')
+    legend('left', paste('Sites included:', nsites_included), bty='n')
 
     par(mar=c(3, 3, 0, 1))
 
@@ -769,8 +781,12 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
 # diagnostics = diag; sitedata=sites
 #readfile='output/filtered_dsets/no_filter.rds'
 # readfile='output/filtered_dsets/daysOver165_ERKunder40.rds'
+# readfile='output/filtered_dsets/no_filter.rds'; diagnostics=diag; sitedata=sites
+# split_vars=c('width_calc', 'BFIWs'); outfile='output/lipset_width_bfi.pdf'
 lips_facet = function(readfile, diagnostics, sitedata, split_vars,
     outfile, ...){
+
+    pdf(file=outfile, width=12, height=8)
 
     layoutmat = matrix(c(
         17,17,18,18,0,5,5,5,5,
@@ -823,8 +839,24 @@ lips_facet = function(readfile, diagnostics, sitedata, split_vars,
     lips_plot(readfile='placeholder', datlist=filt, diagnostics=diagnostics,
         sitedata=sitedata, quant_filt=paste(split_vars[1], '> 0.75'),
         standalone=FALSE, outfile='placeholder')
-    plot(1,1); plot(1,1); plot(1,1); plot(1,1); plot(1,1)
-    plot(1,1); plot(1,1); plot(1,1); plot(1,1); plot(1,1)
+    lips_plot(readfile='placeholder', datlist=filt, diagnostics=diagnostics,
+        sitedata=sitedata, quant_filt=paste(split_vars[1], '< 0.25'),
+        standalone=FALSE, outfile='placeholder')
+    #split 2a
+    lips_plot(readfile='placeholder', datlist=upper75, diagnostics=diagnostics,
+        sitedata=upper75sitedata, quant_filt=paste(split_vars[2], '> 0.75'),
+        standalone=FALSE, outfile='placeholder')
+    lips_plot(readfile='placeholder', datlist=upper75, diagnostics=diagnostics,
+        sitedata=upper75sitedata, quant_filt=paste(split_vars[2], '< 0.25'),
+        standalone=FALSE, outfile='placeholder')
+    #split 2b
+    lips_plot(readfile='placeholder', datlist=lower25, diagnostics=diagnostics,
+        sitedata=lower25sitedata, quant_filt=paste(split_vars[2], '> 0.75'),
+        standalone=FALSE, outfile='placeholder')
+    lips_plot(readfile='placeholder', datlist=lower25, diagnostics=diagnostics,
+        sitedata=lower25sitedata, quant_filt=paste(split_vars[2], '< 0.25'),
+        standalone=FALSE, outfile='placeholder')
+
     plot(1, 1, ann=FALSE, axes=FALSE, type='n', xlim=c(0,1), ylim=c(0,1))
     segments(0, 0.25, 1, 1)
     plot(1, 1, ann=FALSE, axes=FALSE, type='n', xlim=c(0,1), ylim=c(0,1))
@@ -843,7 +875,7 @@ lips_facet = function(readfile, diagnostics, sitedata, split_vars,
         text(filt_disp[2], x=0.2, y=0.2, pos=4)
     }
     plot(1, 1, ann=FALSE, axes=FALSE, type='n', xlim=c(0,1), ylim=c(0,1))
-    legend('center', legend=c('Median', '', '25-75%', '', 'NEP Median'),
+    legend('left', legend=c('Median', '', '25-75%', '', 'NEP Median'),
         col=c('darkgreen', 'sienna4', alpha('forestgreen', alpha=0.6),
             alpha('sienna', alpha=0.6), 'black'),
         bty='n', lty=1, lwd=c(2, 2, 7, 7, 2))
@@ -853,28 +885,12 @@ lips_facet = function(readfile, diagnostics, sitedata, split_vars,
     text(paste('Lower quartile of', split_vars[1]), x=0.5, y=0.8, cex=1.2, font=2)
     plot(1, 1, ann=FALSE, axes=FALSE, type='n', xlim=c(0,1), ylim=c(0,1))
     text(paste('Upper and\nlower quartiles of\n', split_vars[2]),
-        x=0.5, y=0.8, cex=1, font=2)
+        x=0.5, y=0.5, cex=0.8, font=2)
     plot(1, 1, ann=FALSE, axes=FALSE, type='n', xlim=c(0,1), ylim=c(0,1))
     text(paste('Upper and\nlower quartiles of\n', split_vars[2]),
-        x=0.5, y=0.8, cex=1, font=2)
-    # lips_plot(readfile='placeholder', datlist=filt, diagnostics=diagnostics,
-    #     sitedata=sitedata, quant_filt=paste(split_vars[1], '< 0.25'),
-    #     standalone=FALSE, outfile='placeholder')
-    # #split 2a
-    # lips_plot(readfile='placeholder', datlist=upper75, diagnostics=diagnostics,
-    #     sitedata=upper75sitedata, quant_filt=paste(split_vars[2], '> 0.75'),
-    #     standalone=FALSE, outfile='placeholder')
-    # lips_plot(readfile='placeholder', datlist=upper75, diagnostics=diagnostics,
-    #     sitedata=upper75sitedata, quant_filt=paste(split_vars[2], '< 0.25'),
-    #     standalone=FALSE, outfile='placeholder')
-    # #split 2b
-    # lips_plot(readfile='placeholder', datlist=lower25, diagnostics=diagnostics,
-    #     sitedata=lower25sitedata, quant_filt=paste(split_vars[2], '> 0.75'),
-    #     standalone=FALSE, outfile='placeholder')
-    # lips_plot(readfile='placeholder', datlist=lower25, diagnostics=diagnostics,
-    #     sitedata=lower25sitedata, quant_filt=paste(split_vars[2], '< 0.25'),
-    #     standalone=FALSE, outfile='placeholder')
+        x=0.5, y=0.5, cex=0.8, font=2)
 
+    dev.off()
 }
 
 light_gpp_biplot = function(sitedata, outfile){
@@ -945,13 +961,21 @@ er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
 #     diagnostics=diag, sitedata=sites, quant_filt=NULL,
 #     standalone=TRUE, outfile='output/lips_daysOver165_ERKunder40.pdf',
 #     '> 165 days', 'ER * K < 0.4')
-# lips_plot(readfile='output/filtered_dsets/no_filter.rds',
-#     diagnostics=diag, sitedata=sites, quant_filt='width_calc > 0.75',
-#     standalone=TRUE, outfile='output/lips_widthOver75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='width_calc <= 1',
+    standalone=TRUE, outfile='output/lips_overall.pdf')
 # lips_plot(readfile='output/filtered_dsets/no_filter.rds',
 #     diagnostics=diag, sitedata=sites, quant_filt='width_calc < 0.25',
 #     standalone=TRUE, outfile='output/lips_widthUnder25.pdf')
 light_gpp_biplot(sites, 'output/parXgpp.pdf')
 wtemp_er_biplot(sites, 'output/wtempXer_signif.pdf', signif=TRUE)
 # wtemp_er_biplot(sites, 'output/wtempXer_nonsignif.pdf', signif=FALSE)
+lips_facet('output/filtered_dsets/no_filter.rds', diag, sites,
+    c('width_calc', 'BFIWs'), 'output/lipset_width_bfi.pdf')
+lips_facet('output/filtered_dsets/daysOver165.rds', diag, sites,
+    c('width_calc', 'BFIWs'), 'output/lipset_daysOver165_width_bfi.pdf')
+lips_facet('output/filtered_dsets/ERKunder40.rds', diag, sites,
+    c('width_calc', 'BFIWs'), 'output/lipset_ERKUnder40_width_bfi.pdf')
+lips_facet('output/filtered_dsets/daysOver165_ERKunder40.rds', diag, sites,
+    c('width_calc', 'BFIWs'), 'output/lipset_daysOver165_ERKUnder40_width_bfi.pdf')
 
