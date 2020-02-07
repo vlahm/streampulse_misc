@@ -17,17 +17,17 @@ phil_srcs = list.files('phil_stuff/metab_synthesis/R/functions/',
     full.names=TRUE)
 for(x in phil_srcs) source(x)
 
-# # model results from streampulse portal
-# mods = query_available_results('all')[[1]] %>%
-#     as_tibble() %>%
-#     mutate_all(as.character)
+# model results from streampulse portal
+mods = query_available_results('all')[[1]] %>%
+    as_tibble() %>%
+    mutate_all(as.character)
 
 #datasets from Phil
 metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
-metab_d = metab_d[! grepl('nwis', names(metab_d))]
-# names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
-#         arrange=FALSE) %>%
-#     pull(sitecode)
+# metab_d = metab_d[! grepl('nwis', names(metab_d))]
+names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
+        arrange=FALSE) %>%
+    pull(sitecode)
 erXk_p_vals = sapply(metab_d, function(x){
     summary(lm(x$ER~x$K600))$coefficients[2,4]
 })
@@ -35,19 +35,19 @@ erXk_p_vals = tibble(sitecode=names(erXk_p_vals), er_k_pval=erXk_p_vals)
 diag = as_tibble(readRDS('phil_stuff/metab_synthesis/output/yearly_diagnostics.rds'))
 diag = filter(diag, ! is.na(ER_K))
 diag$ER_K = abs(diag$ER_K)
-# diag = phil_to_mike_format(diag, mods) %>%
-#     select(-site, -region)
-diag = filter(diag, ! grepl('nwis', Site_ID)) %>%
-rename(sitecode=Site_ID)
+diag = phil_to_mike_format(diag, mods) %>%
+    select(-site, -region)
+# diag = filter(diag, ! grepl('nwis', Site_ID)) %>%
+#     rename(sitecode=Site_ID)
 metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds'))
 metr = readRDS('phil_stuff/output/metrics_bound.rds') %>%
     select(-one_of('Name', 'Source', 'Lat', 'Lon', 'COMID', 'VPU')) %>%
     as_tibble() %>%
     left_join(metr, by='Site_ID')
-# metr = phil_to_mike_format(metr, mods) %>%
-#     select(-site, -region)
-metr = filter(metr, ! grepl('nwis', Site_ID)) %>%
-    rename(sitecode=Site_ID)
+metr = phil_to_mike_format(metr, mods) %>%
+    select(-site, -region)
+# metr = filter(metr, ! grepl('nwis', Site_ID)) %>%
+#     rename(sitecode=Site_ID)
 
 metr = diag %>%
     group_by(sitecode) %>%
@@ -58,12 +58,12 @@ metr = diag %>%
     left_join(erXk_p_vals, by='sitecode') %>%
     select(-ER_K, -GPP_neg, -ER_pos, -num_days, -er_k_pval, everything())
 
-# mods = mutate(mods, sitecode=paste(region, site, sep='_'))
+mods = mutate(mods, sitecode=paste(region, site, sep='_'))
 
 #subset of streampulse + powell sites used in this analysis
-sites = as_tibble(readRDS('sites_COMID.rds')) %>%
-# sites = phil_to_mike_format(sites, mods)
-    rename(sitecode=Site_ID)
+sites = as_tibble(readRDS('sites_COMID.rds'))
+sites = phil_to_mike_format(sites, mods)
+    # rename(sitecode=Site_ID)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
 
@@ -1000,7 +1000,14 @@ wtemp_er_biplot = function(sitedata, outfile, signif=TRUE){
 
     dev.off()
 }
-
+crude_plot = function(x, y, outfile){
+    pdf(file=outfile, width=8, height=8)
+    plot(x, y)
+    dev.off()
+}
+crude_plot(metr$width_calc, metr$Disch_ar1, 'output/width_discharge.pdf')
+crude_plot(metr$MOD_ann_ER, metr$er_C_mean, 'output/MODISer_streamER.pdf')
+crude_plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean), 'output/logMODISgpp_logStreamGPP.pdf')
 gpp_modis_stream_biplot = function(sitedata, outfile, quantvar=NULL){
 
     pdf(file=outfile, width=8, height=8)
@@ -1060,12 +1067,25 @@ er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
     diagnostics=diag, sitedata=sites, quant_filt='width_calc <= 1',
     standalone=TRUE, outfile='output/lips_overall.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Disch_ar1 > 0.75',
+    standalone=TRUE, outfile='output/lips_Qar1_75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='BFIWs <= 1',
+    standalone=TRUE, outfile='output/lips_BFI.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='BFIWs <= 1',
+    standalone=TRUE, outfile='output/lips_BFI.pdf')
 light_gpp_biplot(sites, 'output/parXgpp2.pdf', colvar='Disch_ar1',
     quantvar='Disch_ar1', xl=2, xr=2.5, yb=2400, yt=2900, txt_x=10, txt_y=3000)
 light_gpp_biplot(sites, 'output/parXgpp2.pdf', colvar='Disch_ar1',
     quantvar=NULL, xl=10, xr=10.2, yb=2400, yt=2900, txt_x=10, txt_y=3000)
 wtemp_er_biplot(sites, 'output/wtempXer_signif.pdf', signif=TRUE)
 # wtemp_er_biplot(sites, 'output/wtempXer_nonsignif.pdf', signif=FALSE)
+lips_facet('output/filtered_dsets/no_filter.rds', diag, sites,
+    c('MOD_ann_GPP', 'ann_GPP_C'), 'output/lipset_terrGPP_aqGPP.pdf')
+lips_facet('output/filtered_dsets/no_filter.rds', diag, sites,
+    c('width_calc', 'Disch_ar1'), 'output/lipset_width_Qar1.pdf')
 lips_facet('output/filtered_dsets/no_filter.rds', diag, sites,
     c('width_calc', 'BFIWs'), 'output/lipset_width_bfi.pdf')
 lips_facet('output/filtered_dsets/daysOver165.rds', diag, sites,
@@ -1077,3 +1097,16 @@ lips_facet('output/filtered_dsets/daysOver165_ERKunder40.rds', diag, sites,
 gpp_modis_stream_biplot(sitedata=sites, outfile='output/modis_stream_biplot.pdf',
     quantvar=NULL)
 gpp_modis_stream_biplot(sites, 'output/modis_stream_biplot_width.pdf', 'width_calc')
+
+
+pcaset = metr %>%
+    select(gpp_C_mean, er_C_mean, PAR_sum, Disch_ar1, width_calc, MOD_ann_GPP,
+        MOD_ann_ER) %>%
+    mutate(log_gpp_C_mean=log(gpp_C_mean), log_er_C_mean=log(gpp_C_mean)) %>%
+    select(-gpp_C_mean, er_C_mean)
+pcaset = pcaset[complete.cases(pcaset),]
+out = prcomp(pcaset, scale=TRUE)
+
+pdf(file='output/candidate_var_pca.pdf', width=8, height=8)
+autoplot(out, loadings=TRUE, loadings.label=TRUE)
+dev.off()
