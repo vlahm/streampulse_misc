@@ -23,11 +23,33 @@ mods = query_available_results('all')[[1]] %>%
     mutate_all(as.character)
 
 #datasets from Phil
+fnet = readRDS('phil_stuff/FLUXNET_standardized.rds')
+fnames = names(fnet)
+for(i in 1:length(fnet)){
+    fnet[[i]]$sitecode = fnames[i]
+}
+fnet = Reduce(bind_rows, fnet)
+fnet = fnet %>%
+    select(sitecode, GPP, ER) %>%
+    group_by(sitecode) %>%
+    summarize_all(mean, na.rm=TRUE) %>%
+    rename(GPP_terr=GPP, ER_terr=ER)
+
 metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
 # metab_d = metab_d[! grepl('nwis', names(metab_d))]
 names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
         arrange=FALSE) %>%
     pull(sitecode)
+mn = names(metab_d)
+for(i in 1:length(mn)){
+    metab_d[[i]]$sitecode = mn[i]
+}
+magg = Reduce(bind_rows, metab_d)
+magg = magg %>%
+    select(sitecode, GPP, ER) %>%
+    group_by(sitecode) %>%
+    summarize_all(mean, na.rm=TRUE) %>%
+    rename(GPP_aq=GPP, ER_aq=ER)
 erXk_p_vals = sapply(metab_d, function(x){
     summary(lm(x$ER~x$K600))$coefficients[2,4]
 })
@@ -66,6 +88,117 @@ sites = phil_to_mike_format(sites, mods)
     # rename(sitecode=Site_ID)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
+
+#terr-aq biplot and dist plots####
+
+# distset = fnet %>%
+#     full_join(magg, by='DOY')
+
+pdf(file='output/day2/gpp_er_biplot.pdf', width=8, height=8)
+# par(xlog=TRUE, ylog=TRUE)
+# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
+xlims = range(c(log(fnet$GPP_terr), log(magg$GPP_aq)), na.rm=TRUE)
+# xlims = c(0, xlims[2])
+ylims = range(c(-1 * log(fnet$ER_terr * -1), log(magg$ER_aq * -1)), na.rm=TRUE)
+# ylims = c(ylims[1], 0)
+gpplim = xlims #for use with the distplots
+erlim = ylims
+# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
+# ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
+plot(log(fnet$GPP_terr), -1 * log(fnet$ER_terr * -1), col=alpha('sienna', alpha=0.5),
+# plot(fnet$GPP_terr, fnet$ER_terr, col=alpha('sienna', alpha=0.5),
+    xlab='log GPP (gC)', xaxs='i', yaxs='i',
+    ylab='log ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
+    # ylab='ER (gC)', xlim=xlims, ylim=ylims, cex=2, cex.lab=1.2, cex.axis=1.2,
+    pch=20, yaxt='n', xaxt='n')
+points(log(metr$gpp_C_mean), -1 * log(metr$er_C_mean * -1), col=alpha('skyblue3', alpha=0.5),
+# points(metr$gpp_C_mean, metr$er_C_mean, col=alpha('skyblue3', alpha=0.5),
+    cex=2, pch=20)
+# points(magg$GPP_aq, magg$ER_aq, col='skyblue3', cex=0.8)
+axis(1, xlog=TRUE)
+axis(2, log='y')
+abline(a=0, b=-1, lty=2)
+dev.off()
+
+pdf(file='output/day2/distplots.pdf', width=8, height=8)
+par(mfrow=c(1, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
+plot(sort(fnet$GPP_terr, decreasing=TRUE), type='n', xlab='',
+    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
+    xaxt='n', yaxt='n', xlim=c(0, 366))
+GPP_terr = sort(fnet$GPP_terr, decreasing=TRUE)
+terrcol = alpha('sienna', alpha=0.5)
+polygon(x=c(rep(0, 166), 166:1), y=c(GPP_terr, rev(GPP_terr)), lwd=2,
+    col=terrcol, border=terrcol)
+par(new=TRUE)
+plot(sort(magg$GPP_aq, decreasing=TRUE), type='n', xlab='',
+    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
+    xaxt='n', yaxt='n', xlim=c(0, 366))
+GPP_aq = sort(magg$GPP_aq, decreasing=TRUE)
+aqcol = alpha('skyblue3', alpha=0.5)
+polygon(x=c(rep(0, 407), 407:1), y=c(GPP_aq, rev(GPP_aq)), lwd=2,
+    col=aqcol, border=aqcol)
+
+
+plot(sort(fnet$ER_terr * -1, decreasing=TRUE), type='l', xlab='',
+    ylab='ER (gC)', bty='l', col='forestgreen', lwd=2)
+lines(sort(magg$ER_aq * -1, decreasing=TRUE), lwd=2, col='sienna')
+mtext('DOY', 1, outer=TRUE)
+dev.off()
+
+# plot(distset$GPP_aq, ylab='', yaxt='n', yaxs='i', type='l', bty='n', xaxt='n')
+# segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_GPP_C, lwd=3,
+#     lend=2, col='forestgreen')
+# axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
+# axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
+# mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
+#     side=2, line=2)
+
+# junk below? ####
+
+m = arrange(m, desc(ann_GPP_C))
+
+pdf(file=outfile, width=12, height=7)
+
+par(mfrow=c(2, 1), mar=c(0, 3, 1, 1), oma=c(0, 1, 0, 0))
+
+# seq500 = seq(500, 3000, 500)
+
+plot(distset$, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_GPP_C, lwd=3,
+    lend=2, col='forestgreen')
+axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
+axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
+mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
+    side=2, line=2)
+
+par(mar=c(3, 3, 0, 1))
+
+plot(m$ann_ER_C, ylab='', yaxt='n', yaxs='i', type='n', bty='n', xaxt='n')
+segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_ER_C, lwd=3,
+    lend=2, col='sienna')
+axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
+axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
+    tcl=0, col='white', lwd=2)
+mtext(expression(paste("Mean annual ER (gC"~"m"^"-2"~" d"^"-1"*')')),
+    side=2, line=2)
+
+if(plot_comm_resp){
+    comm_resp = m$ann_ER_C - m$ann_GPP_C
+    plot(rev(sort(comm_resp, na.last=FALSE)), ylab='', yaxt='n', yaxs='i',
+        type='n', bty='n', xaxt='n')
+    segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=comm_resp, lwd=3,
+        lend=2, col='black')
+    axis(2, las=2, line=-1.8)
+    axis(2, las=2, line=-1.8,
+        # axis(2, las=2, line=-1.8, at=seq500 * -1, xpd=NA, labels=rep('', 6))
+        # axis(2, las=2, line=-1.8, at=seq500 * -1, labels=seq500 * -1,
+        tcl=0, col='white', lwd=2)
+    mtext(expression(paste("Mean annual CR (gC"~"m"^"-2"~" d"^"-1"*')')),
+        side=2, line=2)
+}
+
+dev.off()
+
 
 # 0 bind NHDPlusV2 data ####
 
@@ -702,14 +835,14 @@ er_k_filter_plot = function(diagnostics, outfile){
 lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     standalone, outfile, ...){
 
+    #fixed ylims to 5, -5 for standalone; didn't change standalone=F
+
     #quant_filt example: 'width_calc > 0.25'
     if(standalone){
         filt = readRDS(readfile)
     } else {
         filt = datlist
     }
-
-    nsites_included = sum(sapply(filt, nrow) != 0)
 
     var_quant_filt = NULL
     if(! is.null(quant_filt)){
@@ -725,6 +858,8 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
             as.numeric(quant_comp[3]) * 100, '%')
     }
 
+    nsites_included = sum(sapply(filt, nrow) != 0)
+
     smry = consolidate_list(filt) %>%
         as_tibble() %>%
         group_by(DOY) %>%
@@ -738,10 +873,12 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     }
     par(mar=c(0, 3, 1, 1), lend=2)
 
-    gpplim = c(0, max(smry$GPP_C_filled_quant75, na.rm=TRUE))
-    erlim = c(min(smry$ER_C_filled_quant25, na.rm=TRUE), 0)
-    gpplim = c(0, max(gpplim[2], abs(erlim[1])))
-    erlim = c(min(abs(gpplim[2]) * -1, erlim[1]), 0)
+    # gpplim = c(0, max(smry$GPP_C_filled_quant75, na.rm=TRUE))
+    # erlim = c(min(smry$ER_C_filled_quant25, na.rm=TRUE), 0)
+    # gpplim = c(0, max(gpplim[2], abs(erlim[1])))
+    # erlim = c(min(abs(gpplim[2]) * -1, erlim[1]), 0)
+    gpplim=c(0, 5)
+    erlim=c(-5, 0)
 
     plot(smry$DOY, smry$GPP_C_filled_median, ylab='', yaxs='i', type='l',
         bty='n', lwd=2, xlab='', ylim=gpplim, xaxs='i', xaxt='n', yaxt='n')
@@ -1005,9 +1142,9 @@ crude_plot = function(x, y, outfile){
     plot(x, y)
     dev.off()
 }
-crude_plot(metr$width_calc, metr$Disch_ar1, 'output/width_discharge.pdf')
-crude_plot(metr$MOD_ann_ER, metr$er_C_mean, 'output/MODISer_streamER.pdf')
-crude_plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean), 'output/logMODISgpp_logStreamGPP.pdf')
+# crude_plot(metr$width_calc, metr$Disch_ar1, 'output/width_discharge.pdf')
+# crude_plot(metr$MOD_ann_ER, metr$er_C_mean, 'output/MODISer_streamER.pdf')
+# crude_plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean), 'output/logMODISgpp_logStreamGPP.pdf')
 gpp_modis_stream_biplot = function(sitedata, outfile, quantvar=NULL){
 
     pdf(file=outfile, width=8, height=8)
@@ -1064,9 +1201,39 @@ ts_plot(spmods, 'output/metab_ts_sp.pdf', TRUE)
 ts_plot(powmods, 'output/metab_ts_powell.pdf', TRUE)
 dist_plot(metr, 'output/metab_dist.pdf')
 er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
+#for reals lips plots
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
-    diagnostics=diag, sitedata=sites, quant_filt='width_calc <= 1',
-    standalone=TRUE, outfile='output/lips_overall.pdf')
+    diagnostics=diag, sitedata=sites, quant_filt='width_calc > 0.75',
+    standalone=TRUE, outfile='output/day2/lips_width75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='width_calc < 0.25',
+    standalone=TRUE, outfile='output/day2/lips_width25.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Disch_ar1 > 0.75',
+    standalone=TRUE, outfile='output/day2/lips_Qar1_75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Disch_ar1 < 0.25',
+    standalone=TRUE, outfile='output/day2/lips_Qar1_25.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='MOD_ann_GPP > 0.75',
+    standalone=TRUE, outfile='output/day2/lips_modisGPP_75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='MOD_ann_GPP < 0.25',
+    standalone=TRUE, outfile='output/day2/lips_modisGPP_25.pdf')
+
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Stream_PAR_sum > 0.75',
+    standalone=TRUE, outfile='output/day2/lips_streamPAR_75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Stream_PAR_sum < 0.25',
+    standalone=TRUE, outfile='output/day2/lips_streamPAR_25.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Disch_cv > 0.75',
+    standalone=TRUE, outfile='output/day2/lips_Qcv_75.pdf')
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='Disch_cv < 0.25',
+    standalone=TRUE, outfile='output/day2/lips_Qcv_25.pdf')
+# end for reals
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
     diagnostics=diag, sitedata=sites, quant_filt='Disch_ar1 > 0.75',
     standalone=TRUE, outfile='output/lips_Qar1_75.pdf')
@@ -1098,15 +1265,95 @@ gpp_modis_stream_biplot(sitedata=sites, outfile='output/modis_stream_biplot.pdf'
     quantvar=NULL)
 gpp_modis_stream_biplot(sites, 'output/modis_stream_biplot_width.pdf', 'width_calc')
 
+pdf_plot = function(outfile, var){
 
-pcaset = metr %>%
-    select(gpp_C_mean, er_C_mean, PAR_sum, Disch_ar1, width_calc, MOD_ann_GPP,
-        MOD_ann_ER) %>%
-    mutate(log_gpp_C_mean=log(gpp_C_mean), log_er_C_mean=log(gpp_C_mean)) %>%
-    select(-gpp_C_mean, er_C_mean)
-pcaset = pcaset[complete.cases(pcaset),]
-out = prcomp(pcaset, scale=TRUE)
+    pdf(outfile, height=4, width=7)
 
-pdf(file='output/candidate_var_pca.pdf', width=8, height=8)
-autoplot(out, loadings=TRUE, loadings.label=TRUE)
+    vv = na.omit(sort(metr[[var]]))
+    dens = density(vv)
+    vq = quantile(vv, probs=c(0.25, 0.75))
+    densdf = tibble(x=dens$x, y=dens$y)
+    dens25 = dens75 = densdf
+    # dens25[densdf$x > vq[1], ] = NA
+    # dens75[densdf$x < vq[2], ] = NA
+    dens25 = dens25[densdf$x <= vq[1], ]
+    dens75 = dens75[densdf$x >= vq[2], ]
+    plot(densdf$x, densdf$y, type='l', xlab='width', ylab='density', bty='l',
+        col='gray50', lwd=2)
+    polygon(x=c(dens25$x, rev(dens25$x)),
+        y=c(dens25$y, rep(0, nrow(dens25))), col='gray50', border='gray50')
+    polygon(x=c(dens75$x, rev(dens75$x)),
+        y=c(dens75$y, rep(0, nrow(dens75))), col='gray50', border='gray50')
+
+    dev.off()
+}
+pdf_plot('output/day2/probdens_width.pdf', 'width_calc')
+pdf_plot('output/day2/probdens_Qar1.pdf', 'Disch_ar1')
+pdf_plot('output/day2/probdens_modisGPP.pdf', 'MOD_ann_GPP')
+pdf_plot('output/day2/probdens_streamPAR.pdf', 'Stream_PAR_sum')
+pdf_plot('output/day2/probdens_Qcv.pdf', 'Disch_cv')
+pdf_plot_er_gpp = function(outfile, var='gpp', xlims){
+
+    pdf(outfile, height=4, width=7)
+
+    par(mar=c(1,1,1,1), oma=c(0,0,0,0))
+
+    if(var == 'gpp'){
+        vaq = na.omit(sort(metr$gpp_C_mean))
+        vterr = na.omit(sort(fnet$GPP_terr))
+    } else {
+        vaq = na.omit(sort(metr$er_C_mean))
+        vterr = na.omit(sort(fnet$ER_terr))
+    }
+    dterr = density(vterr)
+    densterr = tibble(x=dterr$x, y=dterr$y)
+    daq = density(vaq)
+    densaq = tibble(x=daq$x, y=daq$y)
+    ylims = range(c(daq$y, dterr$y), na.rm=TRUE)
+    plot(densaq$x, densaq$y, type='n', bty='n', ylim=ylims, xlim=xlims,
+        # col='gray50', lwd=2, xlab='', ylab='')
+        col='gray50', lwd=2, xaxt='n', yaxt='n', xlab='', ylab='', xaxs='i',
+        yaxs='i')
+    terrcol = alpha('sienna', alpha=0.5)
+    polygon(x=c(densterr$x, rev(densterr$x)),
+        y=c(densterr$y, rep(0, nrow(densterr))), col=terrcol, border='sienna')
+    aqcol = alpha('skyblue4', alpha=0.5)
+    polygon(x=c(densaq$x, rev(densaq$x)),
+        y=c(densaq$y, rep(0, nrow(densaq))), col=aqcol, border='skyblue4')
+
+    dev.off()
+}
+pdf_plot_er_gpp('output/day2/GPP_PDFs.pdf', 'gpp', gpplim)
+pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
+
+pdf('output/day2/PAR_vs_Qar1.pdf', height=8, width=8)
+lmod = lm(metr$Disch_ar1 ~ metr$Stream_PAR_sum)
+plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20, xlab='Stream PAR',
+    ylab='Q AR-1', col=alpha('black', alpha=0.5), bty='l', xpd=NA,
+    # main=paste(paste('R^2:', round(summary(lmod)$adj.r.squared, 2), '\n'),
+    # expression(paste('size'~alpha~'GPP'))),
+    main=paste0('R^2: ', round(summary(lmod)$adj.r.squared, 2), '; size=GPP'),
+    cex.main=0.8, cex=metr$gpp_C_amp)
+abline(lmod, lty=2, col='blue')
 dev.off()
+
+# depth acquisition
+####
+plot(metr$gpp_C_mean, metr$er_C_mean)
+metr = metr %>%
+    arrange(desc(gpp_C_mean)) %>%
+    select(gpp_C_mean, everything())
+head(metr)
+metr$sitecode[1:5]
+StreamPULSE::query_available_results('TX', site='nwis-08437710')
+x = StreamPULSE::request_results('OR_nwis-13173600', 2011)
+dd = data.frame(sitecode=rep(NA, 3), depth_m=rep(NA, 3))
+dd[1,] = c('OR_nwis-13173600', mean(x$model_results$data$depth, na.rm=TRUE))
+x = StreamPULSE::request_results('TX_nwis-08446500', 2011)
+dd[2,] = c('TX_nwis-08446500', mean(x$model_results$data$depth, na.rm=TRUE))
+x = StreamPULSE::request_results('TX_nwis-08437710', 2011)
+dd[3,] = c('TX_nwis-08437710', mean(x$model_results$data$depth, na.rm=TRUE))
+write.csv(dd, 'output/day2/extreme_gpp_site_depths.csv', row.names=FALSE)
+
+
+# plot(metr$er_C_mean, metr$MOD_ann_GPP)
