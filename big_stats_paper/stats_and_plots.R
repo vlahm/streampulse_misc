@@ -89,70 +89,6 @@ sites = phil_to_mike_format(sites, mods)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
 
-#terr-aq biplot and dist plots####
-
-# distset = fnet %>%
-#     full_join(magg, by='DOY')
-
-pdf(file='output/day2/gpp_er_biplot.pdf', width=8, height=8)
-# par(xlog=TRUE, ylog=TRUE)
-# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
-xlims = range(c(log(fnet$GPP_terr), log(magg$GPP_aq)), na.rm=TRUE)
-# xlims = c(0, xlims[2])
-ylims = range(c(-1 * log(fnet$ER_terr * -1), log(magg$ER_aq * -1)), na.rm=TRUE)
-# ylims = c(ylims[1], 0)
-gpplim = xlims #for use with the distplots
-erlim = ylims
-# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
-# ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
-plot(log(fnet$GPP_terr), -1 * log(fnet$ER_terr * -1), col=alpha('sienna', alpha=0.5),
-# plot(fnet$GPP_terr, fnet$ER_terr, col=alpha('sienna', alpha=0.5),
-    xlab='log GPP (gC)', xaxs='i', yaxs='i',
-    ylab='log ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
-    # ylab='ER (gC)', xlim=xlims, ylim=ylims, cex=2, cex.lab=1.2, cex.axis=1.2,
-    pch=20, yaxt='n', xaxt='n')
-points(log(metr$gpp_C_mean), -1 * log(metr$er_C_mean * -1), col=alpha('skyblue3', alpha=0.5),
-# points(metr$gpp_C_mean, metr$er_C_mean, col=alpha('skyblue3', alpha=0.5),
-    cex=2, pch=20)
-# points(magg$GPP_aq, magg$ER_aq, col='skyblue3', cex=0.8)
-axis(1, xlog=TRUE)
-axis(2, log='y')
-abline(a=0, b=-1, lty=2)
-dev.off()
-
-pdf(file='output/day2/distplots.pdf', width=8, height=8)
-par(mfrow=c(1, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
-plot(sort(fnet$GPP_terr, decreasing=TRUE), type='n', xlab='',
-    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
-    xaxt='n', yaxt='n', xlim=c(0, 366))
-GPP_terr = sort(fnet$GPP_terr, decreasing=TRUE)
-terrcol = alpha('sienna', alpha=0.5)
-polygon(x=c(rep(0, 166), 166:1), y=c(GPP_terr, rev(GPP_terr)), lwd=2,
-    col=terrcol, border=terrcol)
-par(new=TRUE)
-plot(sort(magg$GPP_aq, decreasing=TRUE), type='n', xlab='',
-    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
-    xaxt='n', yaxt='n', xlim=c(0, 366))
-GPP_aq = sort(magg$GPP_aq, decreasing=TRUE)
-aqcol = alpha('skyblue3', alpha=0.5)
-polygon(x=c(rep(0, 407), 407:1), y=c(GPP_aq, rev(GPP_aq)), lwd=2,
-    col=aqcol, border=aqcol)
-
-
-plot(sort(fnet$ER_terr * -1, decreasing=TRUE), type='l', xlab='',
-    ylab='ER (gC)', bty='l', col='forestgreen', lwd=2)
-lines(sort(magg$ER_aq * -1, decreasing=TRUE), lwd=2, col='sienna')
-mtext('DOY', 1, outer=TRUE)
-dev.off()
-
-# plot(distset$GPP_aq, ylab='', yaxt='n', yaxs='i', type='l', bty='n', xaxt='n')
-# segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_GPP_C, lwd=3,
-#     lend=2, col='forestgreen')
-# axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
-# axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
-# mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
-#     side=2, line=2)
-
 # junk below? ####
 
 m = arrange(m, desc(ann_GPP_C))
@@ -833,7 +769,7 @@ er_k_filter_plot = function(diagnostics, outfile){
 }
 
 lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
-    standalone, outfile, ...){
+    standalone, outfile, filter_label=TRUE, ...){
 
     #fixed ylims to 5, -5 for standalone; didn't change standalone=F
 
@@ -858,7 +794,9 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
             as.numeric(quant_comp[3]) * 100, '%')
     }
 
-    nsites_included = sum(sapply(filt, nrow) != 0)
+    # nsites_included = sum(names(filt) %in%
+    #     sitedata$sitecode[! is.na(sitedata$gpp_C_amp)])
+    nsites_included = sum(sapply(filt, nrow) > 0)
 
     smry = consolidate_list(filt) %>%
         as_tibble() %>%
@@ -898,8 +836,10 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
             col=c('darkgreen', 'sienna4', alpha('forestgreen', alpha=0.6),
                 alpha('sienna', alpha=0.6), 'black'),
             bty='n', lty=1, lwd=c(2, 2, 10, 10, 2))
-        legend('topright', title='Filters', bty='n', title.col='gray30',
-            lty=1, seg.len=0.2, lwd=2, legend=c(..., var_quant_filt))
+        if(filter_label){
+            legend('topright', title='Filters', bty='n', title.col='gray30',
+                lty=1, seg.len=0.2, lwd=2, legend=c(..., var_quant_filt))
+        }
     }
 
     legend('right', title='Cumulative\nMedian Sums', bty='n',
@@ -1137,11 +1077,13 @@ wtemp_er_biplot = function(sitedata, outfile, signif=TRUE){
 
     dev.off()
 }
+
 crude_plot = function(x, y, outfile){
     pdf(file=outfile, width=8, height=8)
     plot(x, y)
     dev.off()
 }
+
 # crude_plot(metr$width_calc, metr$Disch_ar1, 'output/width_discharge.pdf')
 # crude_plot(metr$MOD_ann_ER, metr$er_C_mean, 'output/MODISer_streamER.pdf')
 # crude_plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean), 'output/logMODISgpp_logStreamGPP.pdf')
@@ -1202,6 +1144,10 @@ ts_plot(powmods, 'output/metab_ts_powell.pdf', TRUE)
 dist_plot(metr, 'output/metab_dist.pdf')
 er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
 #for reals lips plots
+lips_plot(readfile='output/filtered_dsets/no_filter.rds',
+    diagnostics=diag, sitedata=sites, quant_filt='width_calc <= 1',
+    standalone=TRUE, outfile='output/final/lips_overall.pdf', filter_label=FALSE)
+
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
     diagnostics=diag, sitedata=sites, quant_filt='width_calc > 0.75',
     standalone=TRUE, outfile='output/day2/lips_width75.pdf')
@@ -1337,8 +1283,71 @@ plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20, xlab='Stream PAR',
 abline(lmod, lty=2, col='blue')
 dev.off()
 
-# depth acquisition
-####
+#terr-aq biplot and dist plots####
+
+# distset = fnet %>%
+#     full_join(magg, by='DOY')
+
+pdf(file='output/day2/gpp_er_biplot.pdf', width=8, height=8)
+# par(xlog=TRUE, ylog=TRUE)
+# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
+xlims = range(c(log(fnet$GPP_terr), log(magg$GPP_aq)), na.rm=TRUE)
+# xlims = c(0, xlims[2])
+ylims = range(c(-1 * log(fnet$ER_terr * -1), log(magg$ER_aq * -1)), na.rm=TRUE)
+# ylims = c(ylims[1], 0)
+gpplim = xlims #for use with the distplots
+erlim = ylims
+# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
+# ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
+plot(log(fnet$GPP_terr), -1 * log(fnet$ER_terr * -1), col=alpha('sienna', alpha=0.5),
+    # plot(fnet$GPP_terr, fnet$ER_terr, col=alpha('sienna', alpha=0.5),
+    xlab='log GPP (gC)', xaxs='i', yaxs='i',
+    ylab='log ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
+    # ylab='ER (gC)', xlim=xlims, ylim=ylims, cex=2, cex.lab=1.2, cex.axis=1.2,
+    pch=20, yaxt='n', xaxt='n')
+points(log(metr$gpp_C_mean), -1 * log(metr$er_C_mean * -1), col=alpha('skyblue3', alpha=0.5),
+    # points(metr$gpp_C_mean, metr$er_C_mean, col=alpha('skyblue3', alpha=0.5),
+    cex=2, pch=20)
+# points(magg$GPP_aq, magg$ER_aq, col='skyblue3', cex=0.8)
+axis(1, xlog=TRUE)
+axis(2, log='y')
+abline(a=0, b=-1, lty=2)
+dev.off()
+
+pdf(file='output/day2/distplots.pdf', width=8, height=8)
+par(mfrow=c(1, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
+plot(sort(fnet$GPP_terr, decreasing=TRUE), type='n', xlab='',
+    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
+    xaxt='n', yaxt='n', xlim=c(0, 366))
+GPP_terr = sort(fnet$GPP_terr, decreasing=TRUE)
+terrcol = alpha('sienna', alpha=0.5)
+polygon(x=c(rep(0, 166), 166:1), y=c(GPP_terr, rev(GPP_terr)), lwd=2,
+    col=terrcol, border=terrcol)
+par(new=TRUE)
+plot(sort(magg$GPP_aq, decreasing=TRUE), type='n', xlab='',
+    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
+    xaxt='n', yaxt='n', xlim=c(0, 366))
+GPP_aq = sort(magg$GPP_aq, decreasing=TRUE)
+aqcol = alpha('skyblue3', alpha=0.5)
+polygon(x=c(rep(0, 407), 407:1), y=c(GPP_aq, rev(GPP_aq)), lwd=2,
+    col=aqcol, border=aqcol)
+
+
+plot(sort(fnet$ER_terr * -1, decreasing=TRUE), type='l', xlab='',
+    ylab='ER (gC)', bty='l', col='forestgreen', lwd=2)
+lines(sort(magg$ER_aq * -1, decreasing=TRUE), lwd=2, col='sienna')
+mtext('DOY', 1, outer=TRUE)
+dev.off()
+
+# plot(distset$GPP_aq, ylab='', yaxt='n', yaxs='i', type='l', bty='n', xaxt='n')
+# segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_GPP_C, lwd=3,
+#     lend=2, col='forestgreen')
+# axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
+# axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
+# mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
+#     side=2, line=2)
+
+# depth acquisition ####
 plot(metr$gpp_C_mean, metr$er_C_mean)
 metr = metr %>%
     arrange(desc(gpp_C_mean)) %>%
@@ -1356,4 +1365,4 @@ dd[3,] = c('TX_nwis-08437710', mean(x$model_results$data$depth, na.rm=TRUE))
 write.csv(dd, 'output/day2/extreme_gpp_site_depths.csv', row.names=FALSE)
 
 
-# plot(metr$er_C_mean, metr$MOD_ann_GPP)
+plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean))
