@@ -13,7 +13,7 @@ mode = 'retrieve'
 
 setwd('~/git/streampulse/other_projects/big_stats_paper/')
 source('helpers.R')
-phil_srcs = list.files('phil_stuff/metab_synthesis/R/functions/',
+phil_srcs = list.files('phil_stuff/metab_synthesis0/R/functions/',
     full.names=TRUE)
 for(x in phil_srcs) source(x)
 
@@ -23,12 +23,12 @@ mods = query_available_results('all')[[1]] %>%
     mutate_all(as.character)
 
 #datasets from Phil
-fnet = readRDS('phil_stuff/FLUXNET_standardized.rds')
-fnames = names(fnet)
-for(i in 1:length(fnet)){
-    fnet[[i]]$sitecode = fnames[i]
+fnet_list = readRDS('phil_stuff/FLUXNET_standardized.rds')
+fnames = names(fnet_list)
+for(i in 1:length(fnet_list)){
+    fnet_list[[i]]$sitecode = fnames[i]
 }
-fnet = Reduce(bind_rows, fnet)
+fnet = Reduce(bind_rows, fnet_list)
 fnet = fnet %>%
     select(sitecode, GPP, ER) %>%
     group_by(sitecode) %>%
@@ -422,6 +422,16 @@ spmods = filter(mods, Source == 'StreamPULSE')
 powmods = filter(mods, Source == 'USGS (Powell Center)')
 
 #apply Philters and gapPhills; generate sub-datasets ####
+
+fyears = lapply(fnet_list, function(x){
+    unique(x$Year)
+})
+flengths = sapply(fyears, length)
+fake_diag = tibble(sitecode=rep(fnames, times=flengths),
+    ER_K=rep(0, sum(flengths)),
+    Year=unname(unlist(fyears)))
+filt_terr = filter_and_impute(fake_diag, models=fnet_list, 'ER_K <= 1', terr=TRUE)
+saveRDS(filt_terr, 'output/filtered_dsets/no_filter_terr.rds')
 
 filt = filter_and_impute(diag, models=metab_d, 'ER_K <= 1')
 # sum(sapply(filt, function(x) ! is.null(x)))
@@ -1146,7 +1156,12 @@ er_k_filter_plot(diag, 'output/erXk_corr_filter.pdf')
 #for reals lips plots
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
     diagnostics=diag, sitedata=sites, quant_filt='width_calc <= 1',
-    standalone=TRUE, outfile='output/final/lips_overall.pdf', filter_label=FALSE)
+    standalone=TRUE, outfile='output/final/lips_overall_stream.pdf',
+    filter_label=FALSE)
+lips_plot(readfile='output/filtered_dsets/no_filter_terr.rds',
+    diagnostics=diag, sitedata=sites, quant_filt=NULL,
+    standalone=TRUE, outfile='output/final/lips_overall_terr.pdf',
+    filter_label=FALSE)
 
 lips_plot(readfile='output/filtered_dsets/no_filter.rds',
     diagnostics=diag, sitedata=sites, quant_filt='width_calc > 0.75',
@@ -1366,3 +1381,103 @@ write.csv(dd, 'output/day2/extreme_gpp_site_depths.csv', row.names=FALSE)
 
 
 plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean))
+
+#peak day and week of productivity ####
+
+magg2 = Reduce(bind_rows, metab_d)
+
+doymaxes = magg2 %>%
+    select(sitecode, DOY, GPP) %>%
+    group_by(sitecode) %>%
+    filter(GPP == max(GPP, na.rm=TRUE)) %>%
+    ungroup() %>%
+    arrange(DOY)
+
+woymaxes = magg2 %>%
+    mutate(WOY=floor(magg2$DOY / 7 - 0.1) + 1) %>%
+    select(sitecode, WOY, GPP) %>%
+    group_by(sitecode) %>%
+    filter(GPP == max(GPP, na.rm=TRUE)) %>%
+    ungroup() %>%
+    arrange(WOY)
+
+pdf('output/final/peak_productivity_dist.pdf', width=7, height=7)
+par(mfrow=c(2, 1))
+hist(doymaxes$DOY, xlab='DOY', main='', breaks=20)
+hist(woymaxes$WOY, xlab='WOY', main='', breaks=20)
+dev.off()
+
+write.csv(doymaxes, file='output/final/peak_productivity_doy.csv', row.names=FALSE)
+write.csv(woymaxes, file='output/final/peak_productivity_woy.csv', row.names=FALSE)
+
+# slope distribution for fluxnet siteyears
+
+fslopes = sapply(fnet_list, function(x){
+
+    x = as_tibble(x) %>%
+        mutate(ER=ER * -1) %>%
+        select(Date, GPP, ER) %>%
+        group_by(substr(Date, 6, 10)) %>%
+        summarize_all(mean, na.rm=TRUE) %>%
+        ungroup()
+
+    slope = summary(lm(x$ER ~ x$GPP))$coefficients[2, 1]
+})
+
+pdf('output/final/fluxnet_GPPxER_slope_dist.pdf', width=5, height=5)
+hist(fslopes, xlab='-ER vs. GPP slope coeff', main='', breaks=20)
+dev.off()
+
+# intra- and inter-annual cvs of productivity ####
+
+fprodcvs_intra = sapply(fnet_list, function(x){
+    cv = sd(x$GPP, na.rm=TRUE) / mean(x$GPP, na.rm=TRUE) * 100
+    return(cv)
+})
+
+sprodcvs_intra = sapply(metab_d, function(x){
+    cv = sd(x$GPP, na.rm=TRUE) / mean(x$GPP, na.rm=TRUE) * 100
+    return(cv)
+})
+
+inter_cv = function(x){
+
+    if(length(unique(x$Year)) >= 3){
+
+        x = x %>%
+            select(GPP, Year) %>%
+            group_by(Year) %>%
+            summarize(GPP=mean(GPP, na.rm=TRUE)) %>%
+            ungroup()
+
+        cv = sd(x$GPP, na.rm=TRUE) / mean(x$GPP, na.rm=TRUE) * 100
+
+        return(cv)
+    }
+
+}
+
+fprodcvs_inter = sapply(fnet_list, inter_cv)
+fprodcvs_inter = unlist(Filter(function(x) ! is.null(x), fprodcvs_inter))
+sprodcvs_inter = sapply(metab_d, inter_cv)
+sprodcvs_inter = unlist(Filter(function(x) ! is.null(x), sprodcvs_inter))
+
+pdf('output/final/gpp_CVs.pdf', width=5, height=5)
+
+par(mfrow=c(2, 1), mar=c(4, 4, 1, 2))
+
+plot(density(fprodcvs_intra[fprodcvs_intra > 0]), xlim=c(0, 1000),
+    ylim=c(0, 0.01), col='darkgreen', lty=2, lwd=2,
+    xlab='Intra-annual CV of GPP', main='', xaxs='i', yaxs='i')
+lines(density(sprodcvs_intra[sprodcvs_intra > 0]), col='cadetblue4', lwd=2)
+legend('topright', legend=c('stream', 'terr'), lty=c(2, 1), lwd=2,
+    col=c('darkgreen', 'cadetblue4'), bty='n')
+
+plot(density(na.omit(fprodcvs_inter[fprodcvs_inter > 0])),# xlim=c(0, 1000),
+    col='darkgreen', lty=2, lwd=2,
+    xlab='Interannual CV of GPP ( > 2 siteyrs)', main='', xaxs='i', yaxs='i')
+lines(density(sprodcvs_inter[sprodcvs_inter > 0]), col='cadetblue4', lwd=2)
+legend('topright', legend=c('stream', 'terr'), lty=c(2, 1), lwd=2,
+    col=c('darkgreen', 'cadetblue4'), bty='n')
+
+dev.off()

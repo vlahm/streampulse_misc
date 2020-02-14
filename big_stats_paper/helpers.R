@@ -179,10 +179,11 @@ streamcat_bulk = function(site_df, streamcat_sets){
     return(streamcat_data)
 }
 
-filter_and_impute = function(diagnostics, models, ...){
+filter_and_impute = function(diagnostics, models, terr=FALSE, ...){
+    # diagnostics=fake_diag; models=fnet_list
 
-    filt = filter_metab(diag=diagnostics, ..., metab_rds=models)
-    imp = synthesis_gapfill(filt, PQ=1.25, block=Inf, pmiss=99)
+    filt = filter_metab(diag=diagnostics, 'ER_K <= 1', metab_rds=models)
+    imp = synthesis_gapfill(filt, PQ=1.25, block=Inf, pmiss=99, terr)
 
     return(imp)
 }
