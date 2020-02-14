@@ -1481,3 +1481,10 @@ legend('topright', legend=c('stream', 'terr'), lty=c(2, 1), lwd=2,
     col=c('darkgreen', 'cadetblue4'), bty='n')
 
 dev.off()
+
+# NWIS (USGS) sites included in analysis ####
+nn = names(metab_d)
+nn = nn[grepl('nwis', nn)]
+nn = substr(nn, 9, nchar(nn))
+write.csv(data.frame(usgs_gage_id=nn), row.names=FALSE,
+    file='output/final/usgs_gage_ids.csv')
