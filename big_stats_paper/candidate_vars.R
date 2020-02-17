@@ -11,7 +11,7 @@ pcaset = metr %>%
     # filter_at(vars(-sitecode, -width_calc), any_vars(! is.na(.)))
 write.csv(pcaset, 'output/candidate_vars_etc.csv', row.names=FALSE)
 corrmat = cor(pcaset[, -1], use='na.or.complete', method='kendall')
-write.csv(corrmat, 'output/day2/candidate_var_corrmat_kendall.csv')
+write.csv(round(corrmat, 2), 'output/day2/candidate_var_corrmat_kendall.csv')
 # pcaset = pcaset[complete.cases(pcaset),]
 out = prcomp(pcaset, scale=TRUE)
 

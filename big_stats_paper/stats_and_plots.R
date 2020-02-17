@@ -135,7 +135,6 @@ if(plot_comm_resp){
 
 dev.off()
 
-
 # 0 bind NHDPlusV2 data ####
 
 if(mode == 'run'){
@@ -1143,6 +1142,61 @@ gpp_modis_stream_biplot = function(sitedata, outfile, quantvar=NULL){
     dev.off()
 }
 
+pdf_plot = function(outfile, var){
+
+    pdf(outfile, height=4, width=7)
+
+    vv = na.omit(sort(metr[[var]]))
+    dens = density(vv)
+    vq = quantile(vv, probs=c(0.25, 0.75))
+    densdf = tibble(x=dens$x, y=dens$y)
+    dens25 = dens75 = densdf
+    # dens25[densdf$x > vq[1], ] = NA
+    # dens75[densdf$x < vq[2], ] = NA
+    dens25 = dens25[densdf$x <= vq[1], ]
+    dens75 = dens75[densdf$x >= vq[2], ]
+    plot(densdf$x, densdf$y, type='l', xlab='width', ylab='density', bty='l',
+        col='gray50', lwd=2)
+    polygon(x=c(dens25$x, rev(dens25$x)),
+        y=c(dens25$y, rep(0, nrow(dens25))), col='gray50', border='gray50')
+    polygon(x=c(dens75$x, rev(dens75$x)),
+        y=c(dens75$y, rep(0, nrow(dens75))), col='gray50', border='gray50')
+
+    dev.off()
+}
+
+pdf_plot_er_gpp = function(outfile, var='gpp', xlims){
+
+    pdf(outfile, height=4, width=7)
+
+    par(mar=c(1,1,1,1), oma=c(0,0,0,0))
+
+    if(var == 'gpp'){
+        vaq = na.omit(sort(metr$gpp_C_mean))
+        vterr = na.omit(sort(fnet$GPP_terr))
+    } else {
+        vaq = na.omit(sort(metr$er_C_mean))
+        vterr = na.omit(sort(fnet$ER_terr))
+    }
+    dterr = density(vterr)
+    densterr = tibble(x=dterr$x, y=dterr$y)
+    daq = density(vaq)
+    densaq = tibble(x=daq$x, y=daq$y)
+    ylims = range(c(daq$y, dterr$y), na.rm=TRUE)
+    plot(densaq$x, densaq$y, type='n', bty='n', ylim=ylims, xlim=xlims,
+        # col='gray50', lwd=2, xlab='', ylab='')
+        col='gray50', lwd=2, xaxt='n', yaxt='n', xlab='', ylab='', xaxs='i',
+        yaxs='i')
+    terrcol = alpha('sienna', alpha=0.5)
+    polygon(x=c(densterr$x, rev(densterr$x)),
+        y=c(densterr$y, rep(0, nrow(densterr))), col=terrcol, border='sienna')
+    aqcol = alpha('skyblue4', alpha=0.5)
+    polygon(x=c(densaq$x, rev(densaq$x)),
+        y=c(densaq$y, rep(0, nrow(densaq))), col=aqcol, border='skyblue4')
+
+    dev.off()
+}
+
 #plots ####
 
 gpp_er_biplot(spmods, 'output/gppXer_sp.pdf')
@@ -1225,107 +1279,48 @@ lips_facet('output/filtered_dsets/daysOver165_ERKunder40.rds', diag, sites,
 gpp_modis_stream_biplot(sitedata=sites, outfile='output/modis_stream_biplot.pdf',
     quantvar=NULL)
 gpp_modis_stream_biplot(sites, 'output/modis_stream_biplot_width.pdf', 'width_calc')
-
-pdf_plot = function(outfile, var){
-
-    pdf(outfile, height=4, width=7)
-
-    vv = na.omit(sort(metr[[var]]))
-    dens = density(vv)
-    vq = quantile(vv, probs=c(0.25, 0.75))
-    densdf = tibble(x=dens$x, y=dens$y)
-    dens25 = dens75 = densdf
-    # dens25[densdf$x > vq[1], ] = NA
-    # dens75[densdf$x < vq[2], ] = NA
-    dens25 = dens25[densdf$x <= vq[1], ]
-    dens75 = dens75[densdf$x >= vq[2], ]
-    plot(densdf$x, densdf$y, type='l', xlab='width', ylab='density', bty='l',
-        col='gray50', lwd=2)
-    polygon(x=c(dens25$x, rev(dens25$x)),
-        y=c(dens25$y, rep(0, nrow(dens25))), col='gray50', border='gray50')
-    polygon(x=c(dens75$x, rev(dens75$x)),
-        y=c(dens75$y, rep(0, nrow(dens75))), col='gray50', border='gray50')
-
-    dev.off()
-}
 pdf_plot('output/day2/probdens_width.pdf', 'width_calc')
 pdf_plot('output/day2/probdens_Qar1.pdf', 'Disch_ar1')
 pdf_plot('output/day2/probdens_modisGPP.pdf', 'MOD_ann_GPP')
 pdf_plot('output/day2/probdens_streamPAR.pdf', 'Stream_PAR_sum')
 pdf_plot('output/day2/probdens_Qcv.pdf', 'Disch_cv')
-pdf_plot_er_gpp = function(outfile, var='gpp', xlims){
-
-    pdf(outfile, height=4, width=7)
-
-    par(mar=c(1,1,1,1), oma=c(0,0,0,0))
-
-    if(var == 'gpp'){
-        vaq = na.omit(sort(metr$gpp_C_mean))
-        vterr = na.omit(sort(fnet$GPP_terr))
-    } else {
-        vaq = na.omit(sort(metr$er_C_mean))
-        vterr = na.omit(sort(fnet$ER_terr))
-    }
-    dterr = density(vterr)
-    densterr = tibble(x=dterr$x, y=dterr$y)
-    daq = density(vaq)
-    densaq = tibble(x=daq$x, y=daq$y)
-    ylims = range(c(daq$y, dterr$y), na.rm=TRUE)
-    plot(densaq$x, densaq$y, type='n', bty='n', ylim=ylims, xlim=xlims,
-        # col='gray50', lwd=2, xlab='', ylab='')
-        col='gray50', lwd=2, xaxt='n', yaxt='n', xlab='', ylab='', xaxs='i',
-        yaxs='i')
-    terrcol = alpha('sienna', alpha=0.5)
-    polygon(x=c(densterr$x, rev(densterr$x)),
-        y=c(densterr$y, rep(0, nrow(densterr))), col=terrcol, border='sienna')
-    aqcol = alpha('skyblue4', alpha=0.5)
-    polygon(x=c(densaq$x, rev(densaq$x)),
-        y=c(densaq$y, rep(0, nrow(densaq))), col=aqcol, border='skyblue4')
-
-    dev.off()
-}
 pdf_plot_er_gpp('output/day2/GPP_PDFs.pdf', 'gpp', gpplim)
 pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
 
-pdf('output/day2/PAR_vs_Qar1.pdf', height=8, width=8)
-lmod = lm(metr$Disch_ar1 ~ metr$Stream_PAR_sum)
-plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20, xlab='Stream PAR',
-    ylab='Q AR-1', col=alpha('black', alpha=0.5), bty='l', xpd=NA,
-    # main=paste(paste('R^2:', round(summary(lmod)$adj.r.squared, 2), '\n'),
-    # expression(paste('size'~alpha~'GPP'))),
-    main=paste0('R^2: ', round(summary(lmod)$adj.r.squared, 2), '; size=GPP'),
-    cex.main=0.8, cex=metr$gpp_C_amp)
-abline(lmod, lty=2, col='blue')
-dev.off()
-
-#terr-aq biplot and dist plots####
+#GPP-ER biplot and dist plots####
 
 # distset = fnet %>%
 #     full_join(magg, by='DOY')
 
-pdf(file='output/day2/gpp_er_biplot.pdf', width=8, height=8)
+pdf(file='output/final/gpp_er_biplot.pdf', width=8, height=8)
 # par(xlog=TRUE, ylog=TRUE)
-# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
-xlims = range(c(log(fnet$GPP_terr), log(magg$GPP_aq)), na.rm=TRUE)
-# xlims = c(0, xlims[2])
-ylims = range(c(-1 * log(fnet$ER_terr * -1), log(magg$ER_aq * -1)), na.rm=TRUE)
-# ylims = c(ylims[1], 0)
+xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
+# xlims = range(c(log(fnet$GPP_terr), log(magg$GPP_aq)), na.rm=TRUE)
+xlims = c(0, xlims[2])
+ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
+# ylims = range(c(-1 * log(fnet$ER_terr * -1), log(magg$ER_aq * -1)), na.rm=TRUE)
+ylims = c(ylims[1], 0)
 gpplim = xlims #for use with the distplots
 erlim = ylims
 # xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
 # ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
 plot(log(fnet$GPP_terr), -1 * log(fnet$ER_terr * -1), col=alpha('sienna', alpha=0.5),
     # plot(fnet$GPP_terr, fnet$ER_terr, col=alpha('sienna', alpha=0.5),
-    xlab='log GPP (gC)', xaxs='i', yaxs='i',
-    ylab='log ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
+    xlab='GPP (gC)',# xaxs='i', yaxs='i',
+    ylab='ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
     # ylab='ER (gC)', xlim=xlims, ylim=ylims, cex=2, cex.lab=1.2, cex.axis=1.2,
     pch=20, yaxt='n', xaxt='n')
 points(log(metr$gpp_C_mean), -1 * log(metr$er_C_mean * -1), col=alpha('skyblue3', alpha=0.5),
     # points(metr$gpp_C_mean, metr$er_C_mean, col=alpha('skyblue3', alpha=0.5),
     cex=2, pch=20)
 # points(magg$GPP_aq, magg$ER_aq, col='skyblue3', cex=0.8)
-axis(1, xlog=TRUE)
-axis(2, log='y')
+# gpprng_log = log(gpprng)
+# gpptck = seq(gpprng_log[1], gpprng_log[2], length.out=30)
+gpptck = seq(gpprng[1], gpprng[2], length.out=20)
+gpptck_log = log(gpptck)
+axis(1, at=gpptck_log, labels=gpptck)
+# axis(1, xlog=TRUE)
+# axis(2, log='y')
 abline(a=0, b=-1, lty=2)
 dev.off()
 
@@ -1488,3 +1483,102 @@ nn = nn[grepl('nwis', nn)]
 nn = substr(nn, 9, nchar(nn))
 write.csv(data.frame(usgs_gage_id=nn), row.names=FALSE,
     file='output/final/usgs_gage_ids.csv')
+
+#identify the "four corners" groups ####
+
+par_z = scale(metr$Stream_PAR_sum)
+q_z = scale(metr$Disch_ar1)
+par_z_inv = par_z * -1
+q_z_inv = q_z * -1
+zframe = data.frame(sitecode=metr$sitecode, par=par_z, qar1=q_z,
+        par_inv=par_z_inv, qar1_inv=q_z_inv) %>%
+    mutate(primary_axis=par_z + q_z, quad_2=par_inv + qar1,
+        quad_4=qar1_inv + par)
+
+# quartile_n = sum(complete.cases(zframe[, c('par', 'qar1')])) / 4
+# bright_stable = head(order(zframe$primary_axis),
+bright_stable_thresh = quantile(zframe$primary_axis, probs=0.75 + 0.125, na.rm=TRUE)
+bright_stable = which(zframe$primary_axis >= bright_stable_thresh)
+dark_stormy_thresh = quantile(zframe$primary_axis, probs=0.25 - 0.125, na.rm=TRUE)
+dark_stormy = which(zframe$primary_axis <= dark_stormy_thresh)
+bright_erratic_thresh = quantile(zframe$quad_4, probs=0.75 + 0.125, na.rm=TRUE)
+bright_erratic = which(zframe$quad_4 >= bright_erratic_thresh)
+dark_dull_thresh = quantile(zframe$quad_2, probs=0.75 + 0.125, na.rm=TRUE)
+dark_dull = which(zframe$quad_2 >= dark_dull_thresh)
+
+#PAR vs Qar1 by gpp ####
+
+pdf('output/final/light_vs_flow_by_gpp.pdf', height=8, width=8)
+par(mar=c(5, 5, 4, 6))
+gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
+rescaled = ((metr$gpp_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
+plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
+    xlab='Light Availability (Mean Annual Surface PAR)',
+    ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
+    col=alpha('darkgreen', alpha=0.5), bty='o',
+    xpd=NA, main='', cex=rescaled, font.lab=2)
+legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
+    pt.cex=c(1, 2, 3, 4), col=alpha('darkgreen', alpha=0.5), xpd=NA,
+    inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nGPP'))))
+dev.off()
+
+
+#PAR vs Qar1 by gpp with corners ####
+
+pdf('output/final/light_vs_flow_by_gpp_corners.pdf', height=8, width=8)
+# lmod = lm(metr$Disch_ar1 ~ metr$Stream_PAR_sum)
+# zz = scales::rescale(metr$gpp_C_mean, to=c(1, 3))
+par(mar=c(5, 5, 4, 6))
+gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
+rescaled = ((metr$gpp_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
+# plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20, xlab='Light Availability',
+plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
+    xlab='Light Availability (Mean Annual Surface PAR)',
+    ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
+    col=alpha('gray60', alpha=0.5), bty='o',
+    # col=alpha('darkgreen', alpha=0.5), bty='u',
+    xpd=NA, main='', cex=rescaled, font.lab=2)
+points(metr[bright_stable, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+    metr[bright_stable, 'Disch_ar1', drop=TRUE], cex=rescaled[bright_stable],
+    # pch=20, col=alpha('black', alpha=0.5))
+    pch=20, col='black')
+points(metr[bright_erratic, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+    metr[bright_erratic, 'Disch_ar1', drop=TRUE], cex=rescaled[bright_erratic],
+    pch=20, col='blue')
+points(metr[dark_stormy, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+    metr[dark_stormy, 'Disch_ar1', drop=TRUE], cex=rescaled[dark_stormy],
+    pch=20, col='orange')
+points(metr[dark_dull, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+    metr[dark_dull, 'Disch_ar1', drop=TRUE], cex=rescaled[dark_dull],
+    pch=20, col='red')
+# main=paste(paste('R^2:', round(summary(lmod)$adj.r.squared, 2), '\n'),
+# expression(paste('size'~alpha~'GPP'))),
+# main=paste0('R^2: ', round(summary(lmod)$adj.r.squared, 2), '; size=GPP'),
+# cex.main=0.8)
+# abline(lmod, lty=2, col='blue')
+legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
+    pt.cex=c(1, 2, 3, 4), col=alpha('gray60', alpha=0.5), xpd=NA,
+    # pt.cex=c(1, 2, 3, 4), col=alpha('darkgreen', alpha=0.5), xpd=NA,
+    inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nGPP'))))
+dev.off()
+
+
+#PAR vs Qar1 by er ####
+
+pdf('output/final/light_vs_flow_by_er.pdf', height=8, width=8)
+par(mar=c(5, 5, 4, 6))
+# gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
+# rescaled = ((-1 * metr$er_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
+errng = range(metr$er_C_mean * -1, na.rm=TRUE)
+rescaled = ((-1 * metr$er_C_mean - errng[1]) / (errng[2] - errng[1])) * (4 - 1) + 1
+plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
+    xlab='Light Availability (Mean Annual Surface PAR)',
+    ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
+    col=alpha('sienna4', alpha=0.5), bty='o',
+    xpd=NA, main='', cex=rescaled, font.lab=2)
+legend('right', legend=c(errng[1], '', '', errng[2]), pch=20, bty='n',
+# legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
+    pt.cex=c(1, 2, 3, 4), col=alpha('sienna4', alpha=0.5), xpd=NA,
+    inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nER'))))
+dev.off()
+
