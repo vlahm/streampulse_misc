@@ -11,6 +11,11 @@ rm(list=ls()); cat('/014')
 mode = 'retrieve'
 # mode = 'run'
 
+terrcolor = 'sienna4'
+aqcolor = 'cadetblue4'
+gppcolor = 'forestgreen'
+ercolor = 'sienna'
+
 setwd('~/git/streampulse/other_projects/big_stats_paper/')
 source('helpers.R')
 phil_srcs = list.files('phil_stuff/metab_synthesis0/R/functions/',
@@ -1287,75 +1292,108 @@ pdf_plot('output/day2/probdens_Qcv.pdf', 'Disch_cv')
 pdf_plot_er_gpp('output/day2/GPP_PDFs.pdf', 'gpp', gpplim)
 pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
 
-#GPP-ER biplot and dist plots####
-
-# distset = fnet %>%
-#     full_join(magg, by='DOY')
+#GPP-ER biplot and dist plots (Figure 1) ####
 
 pdf(file='output/final/gpp_er_biplot.pdf', width=8, height=8)
-# par(xlog=TRUE, ylog=TRUE)
-xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
-# xlims = range(c(log(fnet$GPP_terr), log(magg$GPP_aq)), na.rm=TRUE)
-xlims = c(0, xlims[2])
-ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
-# ylims = range(c(-1 * log(fnet$ER_terr * -1), log(magg$ER_aq * -1)), na.rm=TRUE)
-ylims = c(ylims[1], 0)
-gpplim = xlims #for use with the distplots
-erlim = ylims
-# xlims = range(c(fnet$GPP_terr, magg$GPP_aq), na.rm=TRUE)
-# ylims = range(c(fnet$ER_terr, magg$ER_aq), na.rm=TRUE)
-plot(log(fnet$GPP_terr), -1 * log(fnet$ER_terr * -1), col=alpha('sienna', alpha=0.5),
-    # plot(fnet$GPP_terr, fnet$ER_terr, col=alpha('sienna', alpha=0.5),
+
+log_gpp_terr = log(fnet$GPP_terr)
+log_er_terr = -1 * log(fnet$ER_terr * -1)
+log_gpp_aq = log(metr$gpp_C_mean)
+log_er_aq = -1 * log(metr$er_C_mean * -1)
+plot(log_gpp_terr, log_er_terr, col=alpha(terrcolor, alpha=0.5),
     xlab='GPP (gC)',# xaxs='i', yaxs='i',
     ylab='ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
-    # ylab='ER (gC)', xlim=xlims, ylim=ylims, cex=2, cex.lab=1.2, cex.axis=1.2,
     pch=20, yaxt='n', xaxt='n')
-points(log(metr$gpp_C_mean), -1 * log(metr$er_C_mean * -1), col=alpha('skyblue3', alpha=0.5),
-    # points(metr$gpp_C_mean, metr$er_C_mean, col=alpha('skyblue3', alpha=0.5),
+points(log_gpp_aq, log_er_aq, col=alpha(aqcolor, alpha=0.5),
     cex=2, pch=20)
-# points(magg$GPP_aq, magg$ER_aq, col='skyblue3', cex=0.8)
-# gpprng_log = log(gpprng)
-# gpptck = seq(gpprng_log[1], gpprng_log[2], length.out=30)
-gpptck = seq(gpprng[1], gpprng[2], length.out=20)
+legend('topright', legend=c('FLUXNET', 'StreamPULSE'), pch=20, bty='n', pt.cex=2,
+    col=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)))
+
+all_gpp = c(fnet$GPP_terr, metr$gpp_C_mean)
+all_gpp[all_gpp <= 0] = NA
+gpprng = range(all_gpp, na.rm=TRUE)
+all_er = c(fnet$ER_terr, metr$er_C_mean)
+all_er[all_er >= 0] = NA
+errng = range(all_er, na.rm=TRUE)
+
+gpptck = c(0.04, 0.25, 1, 2, 4, 8, 11.8)
 gpptck_log = log(gpptck)
 axis(1, at=gpptck_log, labels=gpptck)
-# axis(1, xlog=TRUE)
-# axis(2, log='y')
+# ertck = seq(errng[1], errng[2], length.out=20)
+# ertck_log = log(ertck * -1) * -1
+ertck = rev(c(14.3, 8, 4, 2, 1, 0.25, 0.06))
+ertck_log = log(ertck) * -1
+axis(2, at=ertck_log, labels=ertck * -1)
+
 abline(a=0, b=-1, lty=2)
 dev.off()
 
-pdf(file='output/day2/distplots.pdf', width=8, height=8)
-par(mfrow=c(1, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
-plot(sort(fnet$GPP_terr, decreasing=TRUE), type='n', xlab='',
-    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
-    xaxt='n', yaxt='n', xlim=c(0, 366))
-GPP_terr = sort(fnet$GPP_terr, decreasing=TRUE)
-terrcol = alpha('sienna', alpha=0.5)
-polygon(x=c(rep(0, 166), 166:1), y=c(GPP_terr, rev(GPP_terr)), lwd=2,
-    col=terrcol, border=terrcol)
-par(new=TRUE)
-plot(sort(magg$GPP_aq, decreasing=TRUE), type='n', xlab='',
-    ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
-    xaxt='n', yaxt='n', xlim=c(0, 366))
-GPP_aq = sort(magg$GPP_aq, decreasing=TRUE)
-aqcol = alpha('skyblue3', alpha=0.5)
-polygon(x=c(rep(0, 407), 407:1), y=c(GPP_aq, rev(GPP_aq)), lwd=2,
-    col=aqcol, border=aqcol)
+#---
 
+pdf(file='output/final/distplots.pdf', width=8, height=8)
+par(mfrow=c(2, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
 
-plot(sort(fnet$ER_terr * -1, decreasing=TRUE), type='l', xlab='',
-    ylab='ER (gC)', bty='l', col='forestgreen', lwd=2)
-lines(sort(magg$ER_aq * -1, decreasing=TRUE), lwd=2, col='sienna')
-mtext('DOY', 1, outer=TRUE)
+dens = density(na.omit(log_gpp_terr))
+gpp_dens_terr = tibble(x=dens$x, y=dens$y)
+dens = density(na.omit(log_gpp_aq))
+gpp_dens_aq = tibble(x=dens$x, y=dens$y)
+
+plot(gpp_dens_terr$x, gpp_dens_terr$y, type='n', ann=FALSE, xaxt='n', yaxt='n',
+    bty='n')
+mtext('GPP', 1, line=0)
+polygon(x=c(gpp_dens_terr$x, rev(gpp_dens_terr$x)),
+    y=c(gpp_dens_terr$y, rep(0, nrow(gpp_dens_terr))),
+    col=alpha(terrcolor, alpha=0.7),
+    border=alpha(terrcolor, alpha=0.7))
+polygon(x=c(gpp_dens_aq$x, rev(gpp_dens_aq$x)),
+    y=c(gpp_dens_aq$y, rep(0, nrow(gpp_dens_aq))),
+    col=alpha(aqcolor, alpha=0.7),
+    border=alpha(aqcolor, alpha=0.7))
+
+dens = density(na.omit(log_er_terr))
+er_dens_terr = tibble(x=dens$x, y=dens$y)
+dens = density(na.omit(log_er_aq))
+er_dens_aq = tibble(x=dens$x, y=dens$y)
+
+plot(er_dens_terr$x, er_dens_terr$y, type='n', ann=FALSE, xaxt='n', yaxt='n',
+    bty='n')
+mtext('ER', 1, line=0)
+polygon(x=c(er_dens_terr$x, rev(er_dens_terr$x)),
+    y=c(rev(er_dens_terr$y), rep(0, nrow(er_dens_terr))),
+    col=alpha(terrcolor, alpha=0.7),
+    border=alpha(terrcolor, alpha=0.7))
+polygon(x=c(er_dens_aq$x, rev(er_dens_aq$x)),
+    y=c(rev(er_dens_aq$y), rep(0, nrow(er_dens_aq))),
+    col=alpha(aqcolor, alpha=0.7),
+    border=alpha(aqcolor, alpha=0.7))
+
 dev.off()
 
-# plot(distset$GPP_aq, ylab='', yaxt='n', yaxs='i', type='l', bty='n', xaxt='n')
-# segments(x0=1:nrow(m), y0=rep(0, nrow(m)), y1=m$ann_GPP_C, lwd=3,
-#     lend=2, col='forestgreen')
-# axis(2, las=2, line=-1.8, at=seq500, xpd=NA)
-# axis(2, las=2, line=-1.8, tcl=0, col='white', lwd=2, at=seq500)
-# mtext(expression(paste("Mean annual GPP (gC"~"m"^"-2"~" d"^"-1"*')')),
-#     side=2, line=2)
+# plot(sort(na.omit(log_gpp_terr), decreasing=FALSE),
+#     1:length(na.omit(log_gpp_terr)), type='l',
+#     # ylab='', xlab='GPP (gC)',
+#     bty='n', col='sienna', lwd=2, ann=FALSE)
+#     xaxt='n', yaxt='n')#, xlim=c(0, 366))
+# GPP_terr = sort(log_gpp_terr, decreasing=TRUE)
+# terrcol = alpha('sienna', alpha=0.5)
+# polygon(x=log(c(rep(0.0001, 166), 166:1)),
+#     y=c(GPP_terr, rev(GPP_terr)), lwd=2,
+#     col=terrcol, border=terrcol)
+# par(new=TRUE)
+# plot(sort(magg$GPP_aq, decreasing=TRUE), type='n', xlab='',
+#     ylab='GPP (gC)', bty='n', col='sienna', lwd=2, ann=FALSE,
+#     xaxt='n', yaxt='n', xlim=c(0, 366))
+# GPP_aq = sort(magg$GPP_aq, decreasing=TRUE)
+# aqcol = alpha('skyblue3', alpha=0.5)
+# polygon(x=c(rep(0, 407), 407:1), y=c(GPP_aq, rev(GPP_aq)), lwd=2,
+#     col=aqcol, border=aqcol)
+
+
+# plot(sort(fnet$ER_terr * -1, decreasing=TRUE), type='l', xlab='',
+#     ylab='ER (gC)', bty='l', col='forestgreen', lwd=2)
+# lines(sort(magg$ER_aq * -1, decreasing=TRUE), lwd=2, col='sienna')
+# mtext('DOY', 1, outer=TRUE)
+# dev.off()
 
 # depth acquisition ####
 plot(metr$gpp_C_mean, metr$er_C_mean)
@@ -1379,35 +1417,74 @@ plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean))
 
 #peak day and week of productivity ####
 
-magg2 = Reduce(bind_rows, metab_d)
+sagg = Reduce(bind_rows, metab_d)
 
-doymaxes = magg2 %>%
+doymaxes_s = sagg %>%
     select(sitecode, DOY, GPP) %>%
     group_by(sitecode) %>%
     filter(GPP == max(GPP, na.rm=TRUE)) %>%
     ungroup() %>%
     arrange(DOY)
 
-woymaxes = magg2 %>%
-    mutate(WOY=floor(magg2$DOY / 7 - 0.1) + 1) %>%
+woymaxes_s = sagg %>%
+    mutate(WOY=floor(sagg$DOY / 7 - 0.1) + 1) %>%
     select(sitecode, WOY, GPP) %>%
     group_by(sitecode) %>%
     filter(GPP == max(GPP, na.rm=TRUE)) %>%
     ungroup() %>%
     arrange(WOY)
 
-pdf('output/final/peak_productivity_dist.pdf', width=7, height=7)
-par(mfrow=c(2, 1))
-hist(doymaxes$DOY, xlab='DOY', main='', breaks=20)
-hist(woymaxes$WOY, xlab='WOY', main='', breaks=20)
+tagg = Reduce(bind_rows, fnet_list)
+
+doymaxes_t = tagg %>%
+    select(sitecode, DOY, GPP) %>%
+    group_by(sitecode) %>%
+    filter(GPP == max(GPP, na.rm=TRUE)) %>%
+    ungroup() %>%
+    arrange(DOY)
+
+woymaxes_t = tagg %>%
+    mutate(WOY=floor(tagg$DOY / 7 - 0.1) + 1) %>%
+    select(sitecode, WOY, GPP) %>%
+    group_by(sitecode) %>%
+    filter(GPP == max(GPP, na.rm=TRUE)) %>%
+    ungroup() %>%
+    arrange(WOY)
+
+pdf('output/final/peak_productivity_dists.pdf', width=8, height=8)
+
+tdens_doy = density(doymaxes_t$DOY)
+tdens_woy = density(woymaxes_t$WOY)
+tdf = tibble(x_woy=tdens_woy$x, y_woy=tdens_woy$y,
+    x_doy=tdens_doy$x, y_doy=tdens_doy$y)
+sdens_doy = density(doymaxes_s$DOY)
+sdens_woy = density(woymaxes_s$WOY)
+sdf = tibble(x_woy=sdens_woy$x, y_woy=sdens_woy$y,
+    x_doy=sdens_doy$x, y_doy=sdens_doy$y)
+
+plot(tdf$x_doy, tdf$y_doy, xlab='DOY', main='', type='l',
+    col=terrcolor, lwd=2, xlim=range(c(tdf$x_doy, sdf$x_doy), na.rm=TRUE),
+    ylab='Kernel density')
+lines(sdf$x_doy, sdf$y_doy, col=aqcolor, lwd=2)
+legend('topright', legend=c('terr', 'aq'), col=c(terrcolor, aqcolor),
+    lty=1, lwd=2, bty='n')
+
+# plot(tdf$x_woy, tdf$y_woy, xlab='WOY', main='', type='l',
+#     col=terrcolor, lwd=2, xlim=range(c(tdf$x_woy, sdf$x_woy), na.rm=TRUE),
+#     ylab='Kernel density')
+# lines(sdf$x_woy, sdf$y_woy, col=aqcolor, lwd=2)
+
 dev.off()
 
-write.csv(doymaxes, file='output/final/peak_productivity_doy.csv', row.names=FALSE)
-write.csv(woymaxes, file='output/final/peak_productivity_woy.csv', row.names=FALSE)
+write.csv(doymaxes_t, file='output/final/peak_productivity_terr.csv',
+    row.names=FALSE)
+write.csv(doymaxes_s, file='output/final/peak_productivity_aq.csv',
+    row.names=FALSE)
+# write.csv(woymaxes, file='output/final/peak_productivity_woy.csv', row.names=FALSE)
 
-# slope distribution for fluxnet siteyears
+# slope distribution for terr and aq siteyears
 
-fslopes = sapply(fnet_list, function(x){
+get_metab_slope = function(x){
 
     x = as_tibble(x) %>%
         mutate(ER=ER * -1) %>%
@@ -1417,10 +1494,27 @@ fslopes = sapply(fnet_list, function(x){
         ungroup()
 
     slope = summary(lm(x$ER ~ x$GPP))$coefficients[2, 1]
-})
 
-pdf('output/final/fluxnet_GPPxER_slope_dist.pdf', width=5, height=5)
-hist(fslopes, xlab='-ER vs. GPP slope coeff', main='', breaks=20)
+    return(slope)
+}
+
+fslopes = sapply(fnet_list, get_metab_slope)
+sslopes = sapply(metab_d, get_metab_slope)
+
+fdens = density(fslopes)
+fdf = tibble(x=fdens$x, y=fdens$y)
+sdens = density(sslopes)
+sdf = tibble(x=sdens$x, y=sdens$y)
+
+pdf('output/final/gpp_er_slope_dists.pdf', width=8, height=8)
+
+plot(fdf$x, fdf$y, xlab='-ER vs. GPP slope coeff', main='', type='l',
+    col=terrcolor, lwd=2, xlim=range(c(fdf$x, sdf$x), na.rm=TRUE),
+    ylab='Kernel density')
+lines(sdf$x, sdf$y, col=aqcolor, lwd=2)
+legend('topright', legend=c('terr', 'aq'), col=c(terrcolor, aqcolor),
+    lty=1, lwd=2, bty='n')
+
 dev.off()
 
 # intra- and inter-annual cvs of productivity ####
