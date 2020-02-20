@@ -5,7 +5,7 @@ library(RColorBrewer)
 library(plotrix)
 rm(list=ls()); cat('/014')
 
-#setup ####
+# setup ####
 
 #set mode: 'run' will rerun data generators; 'retrieve' will collect outputs
 mode = 'retrieve'
@@ -211,7 +211,7 @@ sites$AREASQKM_corr = round(sites$AREASQKM * sites$reach_proportion, 5)
 sites$TOTDASQKM_corr = sites$TOTDASQKM - (sites$AREASQKM - sites$AREASQKM_corr)
 sites$areal_corr_factor = sites$TOTDASQKM_corr / sites$TOTDASQKM
 
-#bind StreamCat data (superfluous since Phil added his own streamcat pull) ####
+# bind StreamCat data (superfluous since Phil added his own streamcat pull) ####
 
 if(mode == 'run'){
 
@@ -249,7 +249,7 @@ sites = arrange(sites, region, sitecode)
 sites = left_join(sites, metr, by='sitecode')
 sites = sites[! duplicated(sites$sitecode),]
 
-#write variable key table ####
+# write variable key table ####
 
 varnames = colnames(sites)
 varnames = varnames[! varnames %in%
@@ -289,7 +289,7 @@ variable_key = tibble(name=varnames, type=vartypes, source=varsources,
 
 write.csv(variable_key, 'output/variable_key.csv', row.names=FALSE)
 
-#generate/retrieve watershed boundaries ####
+# generate/retrieve watershed boundaries ####
 
 if(mode == 'run'){
 
@@ -338,7 +338,7 @@ if(mode == 'run'){
 
 }
 
-#filter and zip boundaries ####
+# filter and zip boundaries ####
 
 shedfiles = list.files('spatial/indiv_sp_ws/')
 sheds = unique(unname(sapply(shedfiles, function(x){
@@ -368,7 +368,7 @@ for(s in sheds_30pt){
 
 # HERE: wget and unzip powell datasets
 
-#bind IGBP landcover classifications (MCD12Q1v006 LC_Type1) ####
+# bind IGBP landcover classifications (MCD12Q1v006 LC_Type1) ####
 
 library(gdalUtils)
 library(raster)
@@ -411,8 +411,8 @@ check(spset_job)
 head(spset_summ)
 
 
-#bind other MODIS data? ####
-#bind Fluxnet data? ####
+# bind other MODIS data? ####
+# bind Fluxnet data? ####
 
 # 0 bind site data to model output data; separate sp/powell ####
 
@@ -425,7 +425,7 @@ mods = mods %>%
 spmods = filter(mods, Source == 'StreamPULSE')
 powmods = filter(mods, Source == 'USGS (Powell Center)')
 
-#apply Philters and gapPhills; generate sub-datasets ####
+# apply Philters and gapPhills; generate sub-datasets ####
 
 fyears = lapply(fnet_list, function(x){
     unique(x$Year)
@@ -828,8 +828,8 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
             quant75=~quantile(., na.rm=TRUE)[4]))
 
     if(standalone){
-        pdf(file=outfile, width=12, height=7)
-        par(mfrow=c(2, 1), oma=c(0, 1, 0, 0))
+        pdf(file=outfile, width=10, height=10)
+        par(mfrow=c(2, 1), oma=c(1, 1, 0, 0))
     }
     par(mar=c(0, 3, 1, 1), lend=2)
 
@@ -854,10 +854,11 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     medsums = round(colSums(select(smry, contains('median'))), 1)
 
     if(standalone){
-        mtext(expression(paste("GPP (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
-        legend(x=5, y=4, legend=c('GPP', 'ER', 'NEP'),#, 'GPP', 'ER'),
-            col=c('forestgreen', 'sienna4', 'black'),
-            bty='n', lty=1, lwd=c(4, 4, 10, 10, 4))
+        mtext(expression(paste(bold("gC") ~ bold("m") ^ bold("-2") ~
+                bold(" d") ^ bold("-1"))), side=2,
+            line=-0.5, outer=TRUE)
+        # mtext(expression(paste("GPP (gC"~"m"^"-2"~" d"^"-1"*')')), side=2,
+        #     line=2.5)
         # legend('topleft', legend=c('Median', '', '25-75%', '', 'NEP Median'),
         #     col=c('forestgreen', 'sienna4', alpha('forestgreen', alpha=0.6),
         #         alpha('sienna', alpha=0.6), 'black'),
@@ -889,8 +890,8 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     lines(smry$DOY, smry$NEP_C_filled_median, col='black', lwd=4, xpd=NA, lend=1)
 
     if(standalone){
-        mtext(expression(paste("ER (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
-        mtext('DOY', side=1, line=2)
+        # mtext(expression(paste("ER (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
+        mtext('DOY', side=1, line=2, font=2)
         dev.off()
     }
 }
@@ -1254,7 +1255,7 @@ cv_quotients = data.frame(sitecode=names(cv_quotients),
 metr_extras = full_join(corr_coeffs, cv_quotients)
 metr = left_join(metr, metr_extras)
 
-#plots ####
+# plots ####
 
 gpp_er_biplot(spmods, 'output/gppXer_sp.pdf')
 gpp_er_biplot(powmods, 'output/gppXer_powell.pdf')
@@ -1344,7 +1345,7 @@ pdf_plot('output/day2/probdens_Qcv.pdf', 'Disch_cv')
 pdf_plot_er_gpp('output/day2/GPP_PDFs.pdf', 'gpp', gpplim)
 pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
 
-#GPP-ER biplot and dist plots (Figure 1) ####
+# GPP-ER biplot and dist plots (Figure 1) ####
 
 pdf(file='output/final/gpp_er_biplot.pdf', width=8, height=8)
 
@@ -1467,7 +1468,7 @@ write.csv(dd, 'output/day2/extreme_gpp_site_depths.csv', row.names=FALSE)
 
 plot(log(metr$MOD_ann_GPP), log(metr$gpp_C_mean))
 
-#peak day and week of productivity ####
+# peak day and week of productivity ####
 
 sagg = Reduce(bind_rows, metab_d)
 
@@ -1478,6 +1479,14 @@ doymaxes_s = sagg %>%
     ungroup() %>%
     arrange(DOY)
 
+doypeaks_s = doymaxes_s %>%
+    group_by(DOY) %>%
+    summarize(meanGPP=mean(GPP, na.rm=TRUE), nDOY=length(DOY),
+        pctDOY=length(DOY) / nrow(doymaxes_s) * 100) %>%
+    filter(nDOY == max(nDOY, na.rm=TRUE)) %>%
+    mutate(type='stream') %>%
+    select(type, everything())
+
 woymaxes_s = sagg %>%
     mutate(WOY=floor(sagg$DOY / 7 - 0.1) + 1) %>%
     select(sitecode, WOY, GPP) %>%
@@ -1485,6 +1494,14 @@ woymaxes_s = sagg %>%
     filter(GPP == max(GPP, na.rm=TRUE)) %>%
     ungroup() %>%
     arrange(WOY)
+
+woypeaks_s = woymaxes_s %>%
+    group_by(WOY) %>%
+    summarize(meanGPP=mean(GPP, na.rm=TRUE), nWOY=length(WOY),
+        pctWOY=length(WOY) / nrow(woymaxes_s) * 100) %>%
+    filter(nWOY == max(nWOY, na.rm=TRUE)) %>%
+    mutate(type='stream') %>%
+    select(type, everything())
 
 tagg = Reduce(bind_rows, fnet_list)
 
@@ -1495,6 +1512,14 @@ doymaxes_t = tagg %>%
     ungroup() %>%
     arrange(DOY)
 
+doypeaks_t = doymaxes_t %>%
+    group_by(DOY) %>%
+    summarize(meanGPP=mean(GPP, na.rm=TRUE), nDOY=length(DOY),
+        pctDOY=length(DOY) / nrow(doymaxes_t) * 100) %>%
+    filter(nDOY == max(nDOY, na.rm=TRUE)) %>%
+    mutate(type='terr') %>%
+    select(type, everything())
+
 woymaxes_t = tagg %>%
     mutate(WOY=floor(tagg$DOY / 7 - 0.1) + 1) %>%
     select(sitecode, WOY, GPP) %>%
@@ -1502,6 +1527,23 @@ woymaxes_t = tagg %>%
     filter(GPP == max(GPP, na.rm=TRUE)) %>%
     ungroup() %>%
     arrange(WOY)
+
+woypeaks_t = woymaxes_t %>%
+    group_by(WOY) %>%
+    summarize(meanGPP=mean(GPP, na.rm=TRUE), nWOY=length(WOY),
+        pctWOY=length(WOY) / nrow(woymaxes_t) * 100) %>%
+    filter(nWOY == max(nWOY, na.rm=TRUE)) %>%
+    mutate(type='terr') %>%
+    select(type, everything())
+
+most_productive_DOYs = bind_rows(doypeaks_s, doypeaks_t)
+most_productive_WOYs = bind_rows(woypeaks_s, woypeaks_t)
+write.csv(most_productive_DOYs, 'output/final/most_productive_DOYs.csv',
+    row.names=FALSE)
+write.csv(most_productive_WOYs, 'output/final/most_productive_WOYs.csv',
+    row.names=FALSE)
+
+#plot---
 
 pdf('output/final/peak_productivity_dists.pdf', width=8, height=8)
 
@@ -1513,6 +1555,9 @@ sdens_doy = density(doymaxes_s$DOY)
 sdens_woy = density(woymaxes_s$WOY)
 sdf = tibble(x_woy=sdens_woy$x, y_woy=sdens_woy$y,
     x_doy=sdens_doy$x, y_doy=sdens_doy$y)
+
+# woypeaks = pracma::findpeaks(woymaxes_s$GPP, npeaks=3)
+# abline(v=tdf$x_doy[woypeaks])
 
 plot(tdf$x_doy, tdf$y_doy, xlab='DOY', main='', type='l',
     col=terrcolor, lwd=2, xlim=range(c(tdf$x_doy, sdf$x_doy), na.rm=TRUE),
@@ -1534,7 +1579,7 @@ write.csv(doymaxes_s, file='output/final/peak_productivity_aq.csv',
     row.names=FALSE)
 # write.csv(woymaxes, file='output/final/peak_productivity_woy.csv', row.names=FALSE)
 
-# slope distribution for terr and aq siteyears
+# slope distribution for terr and aq siteyears ####
 
 get_metab_slope = function(x){
 
@@ -1552,6 +1597,10 @@ get_metab_slope = function(x){
 
 fslopes = sapply(fnet_list, get_metab_slope)
 sslopes = sapply(metab_d, get_metab_slope)
+
+GPPxER_slopeDists = data.frame(terr=round(quantile(fslopes), 2),
+    aq=round(quantile(sslopes), 2))
+write.csv(GPPxER_slopeDists, 'output/final/GPPxER_slopeDists.csv')
 
 fdens = density(fslopes)
 fdf = tibble(x=fdens$x, y=fdens$y)
@@ -1733,6 +1782,28 @@ axis(1, at=1:4, labels=c('I', 'II', 'III', 'IV'))
 
 dev.off()
 
+# one more four corners plot for Alice ####
+
+bs_inter = sprodcvs_inter[names(sprodcvs_inter) %in% bs_sites]
+bs_intra = sprodcvs_intra[names(sprodcvs_intra) %in% bs_sites]
+dd_inter = sprodcvs_inter[names(sprodcvs_inter) %in% dd_sites]
+dd_intra = sprodcvs_intra[names(sprodcvs_intra) %in% dd_sites]
+ds_inter = sprodcvs_inter[names(sprodcvs_inter) %in% ds_sites]
+ds_intra = sprodcvs_intra[names(sprodcvs_intra) %in% ds_sites]
+be_inter = sprodcvs_inter[names(sprodcvs_inter) %in% be_sites]
+be_intra = sprodcvs_intra[names(sprodcvs_intra) %in% be_sites]
+
+pdf('output/final/4corners_inter_intra_CV_dists.pdf', height=8, width=8)
+
+boxplot(list(bs_inter, bs_intra, dd_inter, dd_intra, ds_inter, ds_intra,
+    be_inter, be_intra), ylab='CV', col=c('orange', 'cadetblue3'), xaxt='n',
+    boxwex=.3)
+axis(1, at=seq(1.5, 7.5, 2), labels=c('I', 'II', 'III', 'IV'))
+legend('topright', legend=c('interannual', 'intra-annual'),
+    fill=c('orange', 'cadetblue3'), bty='n')
+
+dev.off()
+
 # bright and stable site data for Audrey ####
 
 bs_fullnames = as.character(zframe[bright_stable, 1])
@@ -1775,7 +1846,7 @@ full_siteframe = tibble(sitecode=rep(names(yr_list),
 
 write.csv(full_siteframe, 'nwis_siteyears_full.csv', row.names=FALSE)
 
-#PAR vs Qar1 by gpp ####
+# PAR vs Qar1 by gpp ####
 
 pdf('output/final/light_vs_flow_by_gpp.pdf', height=8, width=8)
 par(mar=c(5, 5, 4, 6))
@@ -1792,7 +1863,7 @@ legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
 dev.off()
 
 
-#PAR vs Qar1 by gpp with corners ####
+# PAR vs Qar1 by gpp with corners ####
 
 pdf('output/final/light_vs_flow_by_gpp_corners.pdf', height=8, width=8)
 # lmod = lm(metr$Disch_ar1 ~ metr$Stream_PAR_sum)
@@ -1832,7 +1903,7 @@ legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
 dev.off()
 
 
-#PAR vs Qar1 by er ####
+# PAR vs Qar1 by er ####
 
 pdf('output/final/light_vs_flow_by_er.pdf', height=8, width=8)
 par(mar=c(5, 5, 4, 6))
@@ -1851,3 +1922,11 @@ legend('right', legend=c(errng[1], '', '', errng[2]), pch=20, bty='n',
     inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nER'))))
 dev.off()
 
+
+# P:R vs stream order ####
+metr = left_join(metr, select(sites, sitecode, STREAMORDE))
+
+pdf('output/final/PR_ratio_vs_strahler_order.pdf', width=8, height=8)
+plot(metr$STREAMORDE, metr$gpp_C_mean / metr$er_C_mean, ylab='P:R',
+    xlab='Strahler Order', pch=20, cex=1.5, col=alpha('cadetblue4', alpha=0.1))
+dev.off()
