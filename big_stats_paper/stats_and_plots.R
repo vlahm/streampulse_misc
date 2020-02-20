@@ -475,11 +475,12 @@ saveRDS(filt, 'output/filtered_dsets/daysOver250_ERKunder40.rds')
 
 # 0 plot functions ####
 
-gpp_er_biplot = function(mods, outfile){
+gpp_er_biplot = function(mods, outfile, generate_r2s=FALSE){
 
     cnt = 0
     hold_cnt = FALSE
     errtypes = errmods = errs = list()
+    corr_coeffs = c()
 
     pdf(file=outfile, onefile=TRUE)
     par(mfrow=c(3, 3), mar=c(3, 3, 1, 1), oma=c(1, 2, 1, 1))
@@ -529,8 +530,11 @@ gpp_er_biplot = function(mods, outfile){
             coeffs = round(unname(mres$coefficients[,'Estimate']), 2)
             icept = sprintf('%+.2f', coeffs[1])
             icept = paste(substr(icept, 0, 1), substr(icept, 2, nchar(icept)))
+            corr_coeff = mres$adj.r.squared
+            corr_coeffs = append(corr_coeffs, corr_coeff)
+            names(corr_coeffs)[length(corr_coeffs)] = m$sitecode
             coeff_lab = paste0('y = ', coeffs[2], 'x ', icept, ' (Adj. R^2: ',
-                round(mres$adj.r.squared, 2), ')')
+                round(corr_coeff, 2), ')')
 
             # plot(res$predictions$GPP, res$predictions$ER, main=m$sitecode,
             plot(res$predictions$GPP, res$predictions$ER, main='', xlab='GPP',
@@ -564,7 +568,11 @@ gpp_er_biplot = function(mods, outfile){
 
     dev.off()
 
-    return(list(errtypes=errtypes, errmosd=errmods, errs=errs))
+    if(generate_r2s){
+        return(corr_coeffs)
+    } else {
+        return(list(errtypes=errtypes, errmosd=errmods, errs=errs))
+    }
 }
 
 ts_plot = function(mods, outfile, with_K){
@@ -833,7 +841,8 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     erlim=c(-5, 0)
 
     plot(smry$DOY, smry$GPP_C_filled_median, ylab='', yaxs='i', type='l',
-        bty='n', lwd=2, xlab='', ylim=gpplim, xaxs='i', xaxt='n', yaxt='n')
+        bty='n', lwd=4, xlab='', ylim=gpplim, xaxs='i', xaxt='n', yaxt='n',
+        col='gray30')
     polygon(x=c(smry$DOY, rev(smry$DOY)),
         y=c(smry$GPP_C_filled_quant25, rev(smry$GPP_C_filled_quant75)),
         border=NA, col=alpha('forestgreen', alpha=0.6))
@@ -841,15 +850,18 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
         at=round(seq(0, gpplim[2], length.out=5), 1))
     axis(2, las=2, line=-0.5, xpd=NA, tcl=0, col='transparent',
         at=round(seq(0, gpplim[2], length.out=5), 1))
-    abline(h=0, lty=1, lwd=2, col='gray60')
+    abline(h=0, lty=2, lwd=2, col='gray60')
     medsums = round(colSums(select(smry, contains('median'))), 1)
 
     if(standalone){
         mtext(expression(paste("GPP (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
-        legend('topleft', legend=c('Median', '', '25-75%', '', 'NEP Median'),
-            col=c('darkgreen', 'sienna4', alpha('forestgreen', alpha=0.6),
-                alpha('sienna', alpha=0.6), 'black'),
-            bty='n', lty=1, lwd=c(2, 2, 10, 10, 2))
+        legend(x=5, y=4, legend=c('GPP', 'ER', 'NEP'),#, 'GPP', 'ER'),
+            col=c('forestgreen', 'sienna4', 'black'),
+            bty='n', lty=1, lwd=c(4, 4, 10, 10, 4))
+        # legend('topleft', legend=c('Median', '', '25-75%', '', 'NEP Median'),
+        #     col=c('forestgreen', 'sienna4', alpha('forestgreen', alpha=0.6),
+        #         alpha('sienna', alpha=0.6), 'black'),
+        #     bty='n', lty=1, lwd=c(4, 4, 10, 10, 4))
         if(filter_label){
             legend('topright', title='Filters', bty='n', title.col='gray30',
                 lty=1, seg.len=0.2, lwd=2, legend=c(..., var_quant_filt))
@@ -864,7 +876,7 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     par(mar=c(3, 3, 0, 1))
 
     plot(smry$DOY, smry$ER_C_filled_median, ylab='', yaxs='i', type='l',
-        bty='n', lwd=2, xlab='', ylim=erlim, xaxs='i', xaxt='n', yaxt='n')
+        bty='n', lwd=4, xlab='', ylim=erlim, xaxs='i', xaxt='n', yaxt='n')
     polygon(x=c(smry$DOY, rev(smry$DOY)),
         y=c(smry$ER_C_filled_quant25, rev(smry$ER_C_filled_quant75)),
         border=NA, col=alpha('sienna', alpha=0.6))
@@ -874,7 +886,7 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
         at=round(seq(0, erlim[1], length.out=5), 1))
     axis(1, line=0, tck=-.02, labels=FALSE, at=seq(0, max(smry$DOY), 30))
     axis(1, line=-0.5, tcl=0, col='transparent', at=seq(0, max(smry$DOY), 30))
-    lines(smry$DOY, smry$NEP_C_filled_median, col='black', lwd=2, xpd=NA)
+    lines(smry$DOY, smry$NEP_C_filled_median, col='black', lwd=4, xpd=NA, lend=1)
 
     if(standalone){
         mtext(expression(paste("ER (gC"~"m"^"-2"~" d"^"-1"*')')), side=2, line=2.5)
@@ -1201,6 +1213,46 @@ pdf_plot_er_gpp = function(outfile, var='gpp', xlims){
 
     dev.off()
 }
+
+# 0 generate some additional metrics for four corners analyses ####
+
+if(mode == 'run'){
+    sp_corr_coeffs = gpp_er_biplot(spmods, 'output/gppXer_sp.pdf', generate_r2s=TRUE)
+    powell_corr_coeff = gpp_er_biplot(powmods, 'output/gppXer_powell.pdf',
+        generate_r2s=TRUE)
+    corr_coeffs = c(sp_corr_coeffs, powell_corr_coeff)
+    corr_coeffs = data.frame(sitecode=names(corr_coeffs), corr_coeff=corr_coeffs)
+    write.csv(corr_coeffs, 'corr_coeffs.csv', row.names=FALSE)
+} else {
+    corr_coeffs = read.csv('corr_coeffs.csv', stringsAsFactors=FALSE)
+}
+
+interann_gppOverEr_cv = function(x){
+
+    if(length(unique(x$Year)) >= 3){
+
+        x = x %>%
+            select(GPP, ER, Year) %>%
+            group_by(Year) %>%
+            summarize(GPP=mean(GPP, na.rm=TRUE), ER=mean(ER, na.rm=TRUE)) %>%
+            ungroup()
+
+        GPP_ER_quotient = x$GPP / x$ER
+        GPP_ER_quotient_cv = sd(GPP_ER_quotient, na.rm=TRUE) /
+            mean(GPP_ER_quotient, na.rm=TRUE) * 100
+
+        return(GPP_ER_quotient_cv)
+    }
+
+}
+
+cv_quotients = sapply(metab_d, interann_gppOverEr_cv)
+cv_quotients = cv_quotients[sapply(cv_quotients, function(x) ! is.null(x))]
+cv_quotients = data.frame(sitecode=names(cv_quotients),
+    quotient_cv=unname(unlist(cv_quotients)), stringsAsFactors=FALSE)
+
+metr_extras = full_join(corr_coeffs, cv_quotients)
+metr = left_join(metr, metr_extras)
 
 #plots ####
 
@@ -1578,7 +1630,7 @@ nn = substr(nn, 9, nchar(nn))
 write.csv(data.frame(usgs_gage_id=nn), row.names=FALSE,
     file='output/final/usgs_gage_ids.csv')
 
-#identify the "four corners" groups ####
+# 0 identify the "four corners" groups ####
 
 par_z = scale(metr$Stream_PAR_sum)
 q_z = scale(metr$Disch_ar1)
@@ -1593,12 +1645,135 @@ zframe = data.frame(sitecode=metr$sitecode, par=par_z, qar1=q_z,
 # bright_stable = head(order(zframe$primary_axis),
 bright_stable_thresh = quantile(zframe$primary_axis, probs=0.75 + 0.125, na.rm=TRUE)
 bright_stable = which(zframe$primary_axis >= bright_stable_thresh)
-dark_stormy_thresh = quantile(zframe$primary_axis, probs=0.25 - 0.125, na.rm=TRUE)
-dark_stormy = which(zframe$primary_axis <= dark_stormy_thresh)
+er_thresh = quantile(zframe$primary_axis, probs=0.25 - 0.125, na.rm=TRUE)
+dark_stormy = which(zframe$primary_axis <= er_thresh)
 bright_erratic_thresh = quantile(zframe$quad_4, probs=0.75 + 0.125, na.rm=TRUE)
 bright_erratic = which(zframe$quad_4 >= bright_erratic_thresh)
 dark_dull_thresh = quantile(zframe$quad_2, probs=0.75 + 0.125, na.rm=TRUE)
 dark_dull = which(zframe$quad_2 >= dark_dull_thresh)
+
+bs_sites = as.character(zframe[bright_stable, 1])
+ds_sites = as.character(zframe[dark_stormy, 1])
+be_sites = as.character(zframe[bright_erratic, 1])
+dd_sites = as.character(zframe[dark_dull, 1])
+
+# four corners plots ####
+
+bs_metr = metr[metr$sitecode %in% bs_sites, ]
+ds_metr = metr[metr$sitecode %in% ds_sites, ]
+be_metr = metr[metr$sitecode %in% be_sites, ]
+dd_metr = metr[metr$sitecode %in% dd_sites, ]
+
+# gpp_quants = data.frame(bs=quantile(bs_metr$gpp_C_ar1),
+#     ds=quantile(ds_metr$gpp_C_ar1),
+#     be=quantile(be_metr$gpp_C_ar1),
+#     dd=quantile(dd_metr$gpp_C_ar1))
+
+# plot(1:4, unlist(gpp_quants['50%',]), ylim=ylims, pch=15,
+#     ylab='GPP AR-1')
+# segments(1:4, unlist(gpp_quants['0%',]), 1:4, unlist(gpp_quants['25%',]))
+
+boxout_gppAR1 = boxplot(list(bs_metr$gpp_C_ar1, dd_metr$gpp_C_ar1,
+    ds_metr$gpp_C_ar1, be_metr$gpp_C_ar1))
+boxout_erAR1 = boxplot(list(bs_metr$er_C_ar1, dd_metr$er_C_ar1,
+    ds_metr$er_C_ar1, be_metr$er_C_ar1))
+boxout_erXgppR2 = boxplot(list(bs_metr$corr_coeff, dd_metr$corr_coeff,
+    ds_metr$corr_coeff, be_metr$corr_coeff))
+bs_metr_sub = bs_metr$quotient_cv[bs_metr$quotient_cv < 4000]
+boxout_quotientCV = boxplot(list(bs_metr_sub, dd_metr$quotient_cv,
+    ds_metr$quotient_cv, be_metr$quotient_cv))
+
+pdf('output/final/4corners.pdf', width=10, height=10)
+
+par(mfrow=c(2, 2))
+
+#gpp ar1
+ylims = range(c(boxout_gppAR1$stats, boxout_gppAR1$out))
+plot(1:4, boxout_gppAR1$stats[3,], ylim=ylims, pch=15, ylab='GPP AR-1', col=gppcolor,
+    xlab='', xaxt='n', cex=0.6)
+segments(1:4, boxout_gppAR1$stats[1,], 1:4, boxout_gppAR1$stats[2,], lwd=3,
+    col=gppcolor, lend=1)
+segments(1:4, boxout_gppAR1$stats[4,], 1:4, boxout_gppAR1$stats[5,], lwd=3,
+    col=gppcolor, lend=1)
+points(boxout_gppAR1$group, boxout_gppAR1$out, pch=4, cex=1, col=gppcolor)
+axis(1, at=1:4, labels=c('I', 'II', 'III', 'IV'))
+
+#er ar1
+ylims = range(c(boxout_erAR1$stats, boxout_erAR1$out))
+plot(1:4, boxout_erAR1$stats[3,], ylim=ylims, pch=15, ylab='ER AR-1', col=ercolor,
+    xlab='', xaxt='n', cex=0.6)
+segments(1:4, boxout_erAR1$stats[1,], 1:4, boxout_erAR1$stats[2,], lwd=3,
+    col=ercolor, lend=1)
+segments(1:4, boxout_erAR1$stats[4,], 1:4, boxout_erAR1$stats[5,], lwd=3,
+    col=ercolor, lend=1)
+points(boxout_erAR1$group, boxout_erAR1$out, pch=4, cex=1, col=ercolor)
+axis(1, at=1:4, labels=c('I', 'II', 'III', 'IV'))
+
+#gpp x er corr coeff
+ylims = range(c(boxout_erXgppR2$stats, boxout_erXgppR2$out))
+plot(1:4, boxout_erXgppR2$stats[3,], ylim=ylims, pch=15, ylab='ER vs. GPP R^2',
+    col='black', xlab='', xaxt='n', cex=0.6)
+segments(1:4, boxout_erXgppR2$stats[1,], 1:4, boxout_erXgppR2$stats[2,], lwd=3,
+    col='black', lend=1)
+segments(1:4, boxout_erXgppR2$stats[4,], 1:4, boxout_erXgppR2$stats[5,], lwd=3,
+    col='black', lend=1)
+points(boxout_erXgppR2$group, boxout_erXgppR2$out, pch=4, cex=1, col='black')
+axis(1, at=1:4, labels=c('I', 'II', 'III', 'IV'))
+
+#GPP/ER CV for sites with >=3 yrs results
+ylims = range(c(boxout_quotientCV$stats, boxout_quotientCV$out))
+plot(1:4, boxout_quotientCV$stats[3,], ylim=ylims, pch=15, ylab='GPP/ER CV',
+    col='gray50', xlab='', xaxt='n', cex=0.6)
+segments(1:4, boxout_quotientCV$stats[1,], 1:4, boxout_quotientCV$stats[2,], lwd=3,
+    col='gray50', lend=1)
+segments(1:4, boxout_quotientCV$stats[4,], 1:4, boxout_quotientCV$stats[5,], lwd=3,
+    col='gray50', lend=1)
+points(boxout_quotientCV$group, boxout_quotientCV$out, pch=4, cex=1, col='gray50')
+axis(1, at=1:4, labels=c('I', 'II', 'III', 'IV'))
+
+dev.off()
+
+# bright and stable site data for Audrey ####
+
+bs_fullnames = as.character(zframe[bright_stable, 1])
+xx = metab_d[bs_fullnames[grep('nwis', bs_fullnames)]]
+yr_list = lapply(xx, function(x) unique(x$Year))
+
+bs_sites = na.omit(unname(sapply(bs_fullnames,
+    function(x){
+        strsplit(x, '-')[[1]][2]
+    })))
+
+names(yr_list) = bs_sites
+
+saveRDS(yr_list, 'siteyears.rds')
+# write.csv(data.frame(nwis_code=bs_sites), 'bright_stable_sites.csv',
+#     row.names=FALSE)
+
+bs_siteframe = tibble(sitecode=rep(names(yr_list),
+    times=sapply(yr_list, length)),
+    year=unname(unlist(yr_list)))
+
+write.csv(bs_siteframe, 'nwis_siteyears_sub.csv', row.names=FALSE)
+
+#full sitelist
+fullnames = as.character(zframe[c(dark_stormy, bright_stable,
+    bright_erratic, dark_dull), 1])
+xx = metab_d[fullnames[grep('nwis', fullnames)]]
+yr_list = lapply(xx, function(x) unique(x$Year))
+
+sites = na.omit(unname(sapply(fullnames,
+    function(x){
+        strsplit(x, '-')[[1]][2]
+    })))
+
+names(yr_list) = sites
+
+full_siteframe = tibble(sitecode=rep(names(yr_list),
+    times=sapply(yr_list, length)),
+    year=unname(unlist(yr_list)))
+
+write.csv(full_siteframe, 'nwis_siteyears_full.csv', row.names=FALSE)
 
 #PAR vs Qar1 by gpp ####
 
@@ -1639,8 +1814,8 @@ points(metr[bright_stable, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
 points(metr[bright_erratic, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
     metr[bright_erratic, 'Disch_ar1', drop=TRUE], cex=rescaled[bright_erratic],
     pch=20, col='blue')
-points(metr[dark_stormy, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
-    metr[dark_stormy, 'Disch_ar1', drop=TRUE], cex=rescaled[dark_stormy],
+points(metr[er, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+    metr[er, 'Disch_ar1', drop=TRUE], cex=rescaled[er],
     pch=20, col='orange')
 points(metr[dark_dull, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
     metr[dark_dull, 'Disch_ar1', drop=TRUE], cex=rescaled[dark_dull],
