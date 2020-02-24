@@ -1672,7 +1672,7 @@ legend('topright', legend=c('stream', 'terr'), lty=c(2, 1), lwd=2,
 
 dev.off()
 
-# NWIS (USGS) sites included in analysis ####
+# NWIS (USGS) sites included in analysis (more below) ####
 nn = names(metab_d)
 nn = nn[grepl('nwis', nn)]
 nn = substr(nn, 9, nchar(nn))
@@ -1804,7 +1804,7 @@ legend('topright', legend=c('interannual', 'intra-annual'),
 
 dev.off()
 
-# bright and stable site data for Audrey ####
+# bright and stable site data for Audrey (nwis siteyear lists) ####
 
 bs_fullnames = as.character(zframe[bright_stable, 1])
 xx = metab_d[bs_fullnames[grep('nwis', bs_fullnames)]]
@@ -1845,6 +1845,27 @@ full_siteframe = tibble(sitecode=rep(names(yr_list),
     year=unname(unlist(yr_list)))
 
 write.csv(full_siteframe, 'nwis_siteyears_full.csv', row.names=FALSE)
+
+#sp siteyear list ####
+mnms = names(metab_d)
+sp_d = metab_d[! grepl('nwis', mnms)]
+sp_yr_list = lapply(sp_d, function(x) unique(x$Year))
+
+sp_siteframe = tibble(sitecode=rep(names(sp_yr_list),
+    times=sapply(sp_yr_list, length)),
+    year=unname(unlist(sp_yr_list)))
+
+write.csv(sp_siteframe, 'sp_siteyears_full.csv', row.names=FALSE)
+
+# in_analysis = diag %>%
+#     filter(! grepl('nwis', sitecode)) %>%
+#     mutate(x=paste(sitecode, Year)) %>%
+#     pull()
+# existing = sp_siteframe %>%
+#     mutate(x=paste(sitecode, year)) %>%
+#     pull()
+# setdiff(in_analysis, existing)
+# setdiff(existing, in_analysis)
 
 # PAR vs Qar1 by gpp ####
 
