@@ -1,8 +1,10 @@
 streampulse_gppXer_all.pdf
 streampulse_metab_ts_all.pdf
 sites_COMID.rds
+sites_COMID_OBSOLETE.rds
 phil_stuff
 streampulse_metab_ts_all_noK.pdf
 spatial
 output
 proc_funcs
+all_sp_model_objects/

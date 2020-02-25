@@ -22,6 +22,6 @@ data = jsonlite::fromJSON(json)
 #now we must traverse the data labyrinth. good luck! Seeing this, I think I'll
 #email Jordan and Alison after all. Maybe they know some shortcuts.
 str(data) #!!!
-head(data$value$timeSeries$values)
+head(data$value$timeSeries$values[[1]])
 View(data$value$timeSeries$variable)
 data$value$timeSeries$variable$

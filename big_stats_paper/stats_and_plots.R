@@ -88,13 +88,15 @@ metr = diag %>%
 mods = mutate(mods, sitecode=paste(region, site, sep='_'))
 
 #subset of streampulse + powell sites used in this analysis
-sites = as_tibble(readRDS('sites_COMID.rds'))
-sites = phil_to_mike_format(sites, mods)
+sites = as_tibble(readRDS('sites_COMID.rds')) #updated with NH sites
+# sites = phil_to_mike_format(sites, mods)
     # rename(sitecode=Site_ID)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
+newsites = c('NH_BEF', 'NH_DCF', 'NH_GOF', 'NH_HBF', 'NH_MCQ', 'NH_SBM',
+    'NH_TPB', 'NH_WHB')
 
-# junk below? ####
+# this section obsolete probably ####
 
 m = arrange(m, desc(ann_GPP_C))
 
@@ -245,9 +247,12 @@ sites = left_join(sites, streamcat_data, by='COMID')
 sites = sites[! duplicated(sites$sitecode),]
 sites = arrange(sites, region, sitecode)
 
-# 0 bind Phil's StreamCat dataset####
+# 0 bind Phil's StreamCat dataset ####
+
 sites = left_join(sites, metr, by='sitecode')
 sites = sites[! duplicated(sites$sitecode),]
+# sites2 = left_join(sites, metr, by='sitecode')
+# sites2 = sites2[! duplicated(sites2$sitecode),]
 
 # write variable key table ####
 
@@ -1951,3 +1956,51 @@ pdf('output/final/PR_ratio_vs_strahler_order.pdf', width=8, height=8)
 plot(metr$STREAMORDE, metr$gpp_C_mean / metr$er_C_mean, ylab='P:R',
     xlab='Strahler Order', pch=20, cex=1.5, col=alpha('cadetblue4', alpha=0.1))
 dev.off()
+
+
+
+# rebuild datasets after refitting and adding models ####
+
+#update sites df
+nh_sites = StreamPULSE::query_available_data(region='NH')$site %>%
+    filter(site != 'BDC') %>%
+    mutate(Source='StreamPULSE', sitecode=paste(region, site, sep='_'))
+
+nh_sites$COMID = mapply(comid_from_point, nh_sites$latitude, nh_sites$longitude,
+    WGS84)
+nh_sites$VPU = mapply(vpu_from_point, nh_sites$latitude, nh_sites$longitude,
+    WGS84)
+# nh_sites$reach_props = mapply(calc_reach_prop, nh_sites$VPU, nh_sites$COMID,
+#     nh_sites$latitude, nh_sites$longitude, WGS84)
+# reach_proportion = readRDS('output/reach_prop_col.rds')
+# sites$reach_proportion[! sites$sitecode %in% newsites] = reach_proportion
+# sites$reach_proportion[sites$sitecode %in% newsites] = nh_sites$reach_props
+# saveRDS(sites$reach_proportion, 'output/reach_prop_col.rds')
+
+nh_sites = select(nh_sites, Name=name, Source, Lat=latitude, Lon=longitude,
+    COMID, VPU, site, region, sitecode)
+
+sites = sites %>%
+    bind_rows(nh_sites) %>%
+    arrange(sitecode)
+
+saveRDS(sites, 'sites_COMID.rds')
+
+setlist = list('NHDPlusAttributes'='PlusFlowlineVAA',
+    'NHDPlusAttributes'='ElevSlope')
+nh_nhd = nhdplusv2_bulk(nh_sites, setlist, quiet=TRUE)
+colnames(nh_nhd) = toupper(colnames(nh_nhd))
+nh_nhd = nh_nhd[, ! duplicated(colnames(nh_nhd))]
+nh_nhd = select(nh_nhd, COMID, STREAMORDE, FROMMEAS, TOMEAS, SLOPE,
+    REACHCODE, AREASQKM, TOTDASQKM, MAXELEVSMO, MINELEVSMO)
+nhdplusv2_data = bind_rows(nhdplusv2_data, nh_nhd)
+sites = left_join(sites, nhdplusv2_data, by='COMID')
+sites = sites[! duplicated(sites$Name),]
+
+saveRDS(nhdplusv2_data, 'output/nhdplusv2_data.rds')
+
+#update metrics (and prerequisites)
+head(metr)
+metr$
+
+}
