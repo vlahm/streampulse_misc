@@ -84,6 +84,12 @@ metr = diag %>%
     right_join(metr, by='sitecode') %>%
     left_join(erXk_p_vals, by='sitecode') %>%
     select(-ER_K, -GPP_neg, -ER_pos, -num_days, -er_k_pval, everything())
+magg2 = metr %>%
+    select(sitecode, gpp_C_mean, er_C_mean) %>%
+    group_by(sitecode) %>%
+    summarize_all(mean, na.rm=TRUE) %>%
+    rename(GPP_aq=gpp_C_mean, ER_aq=er_C_mean) %>%
+    filter(! is.na(GPP_aq))
 
 mods = mutate(mods, sitecode=paste(region, site, sep='_'))
 
@@ -1352,34 +1358,43 @@ pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
 
 # GPP-ER biplot and dist plots (Figure 1) ####
 
-pdf(file='output/final/gpp_er_biplot.pdf', width=8, height=8)
+pdf(file='output/final/gpp_er_biplot_cumulAnnual.pdf', width=8, height=8)
+par(mar=c(4.5, 4.5, 2, 2))
 
-log_gpp_terr = log(fnet$GPP_terr)
-log_er_terr = -1 * log(fnet$ER_terr * -1)
-log_gpp_aq = log(metr$gpp_C_mean)
-log_er_aq = -1 * log(metr$er_C_mean * -1)
+log_gpp_terr = log(fnet$GPP_terr * 365)
+log_er_terr = -1 * log(fnet$ER_terr * -365)
+log_gpp_aq = log(magg2$GPP_aq * 365)
+log_er_aq = -1 * log(magg2$ER_aq * -365)
+# log_gpp_aq = log(metr$gpp_C_mean * 365)
+# log_er_aq = -1 * log(metr$er_C_mean * -365)
 plot(log_gpp_terr, log_er_terr, col=alpha(terrcolor, alpha=0.5),
-    xlab='GPP (gC)',# xaxs='i', yaxs='i',
-    ylab='ER (gC)', cex=2, cex.lab=1.2, cex.axis=1.2,
+    xlab='', ylab='', # xaxs='i', yaxs='i',
+    cex=2, cex.lab=1.2, cex.axis=1.2,
     pch=20, yaxt='n', xaxt='n')
+mtext(expression(paste("Cumulative GPP (gC"~"m"^"-2"*" y"^"-1"*')')),
+    1, line=3)
+mtext(expression(paste("Cumulative ER (gC"~"m"^"-2"*" y"^"-1"*')')),
+    2, line=3)
 points(log_gpp_aq, log_er_aq, col=alpha(aqcolor, alpha=0.5),
     cex=2, pch=20)
 legend('topright', legend=c('FLUXNET', 'StreamPULSE'), pch=20, bty='n', pt.cex=2,
     col=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)))
 
-all_gpp = c(fnet$GPP_terr, metr$gpp_C_mean)
+all_gpp = c(fnet$GPP_terr * 365, metr$gpp_C_mean * 365)
 all_gpp[all_gpp <= 0] = NA
 gpprng = range(all_gpp, na.rm=TRUE)
-all_er = c(fnet$ER_terr, metr$er_C_mean)
+all_er = c(fnet$ER_terr * 365, metr$er_C_mean * 365)
 all_er[all_er >= 0] = NA
 errng = range(all_er, na.rm=TRUE)
 
-gpptck = c(0.04, 0.25, 1, 2, 4, 8, 11.8)
+# gpptck = c(0.04, 0.25, 1, 2, 4, 8, 11.8) * 365
+gpptck = c(14.6, 100, 1000, 4307)
 gpptck_log = log(gpptck)
 axis(1, at=gpptck_log, labels=gpptck)
 # ertck = seq(errng[1], errng[2], length.out=20)
 # ertck_log = log(ertck * -1) * -1
-ertck = rev(c(14.3, 8, 4, 2, 1, 0.25, 0.06))
+# ertck = rev(c(14.3, 8, 4, 2, 1, 0.25, 0.06) * 365)
+ertck = rev(c(5215, 1000, 100, 21.9))
 ertck_log = log(ertck) * -1
 axis(2, at=ertck_log, labels=ertck * -1)
 
@@ -1388,7 +1403,7 @@ dev.off()
 
 #---
 
-pdf(file='output/final/distplots.pdf', width=8, height=8)
+pdf(file='output/final/gpp_er_distplots.pdf', width=8, height=8)
 par(mfrow=c(2, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
 
 dens = density(na.omit(log_gpp_terr))
@@ -1710,6 +1725,12 @@ bs_sites = as.character(zframe[bright_stable, 1])
 ds_sites = as.character(zframe[dark_stormy, 1])
 be_sites = as.character(zframe[bright_erratic, 1])
 dd_sites = as.character(zframe[dark_dull, 1])
+quadrant_df = data.frame(site=c(bs_sites, dd_sites, ds_sites, be_sites),
+    quadrant=c(rep('1_bright_stable', length(bs_sites)),
+        rep('2_dark_dull', length(dd_sites)),
+        rep('3_dark_stormy', length(ds_sites)),
+        rep('4_bright_erratic', length(be_sites))))
+write.csv(quadrant_df, 'sites_by_quadrant.csv')
 
 # four corners plots ####
 
@@ -2004,3 +2025,37 @@ head(metr)
 metr$
 
 }
+# df for emily to build annual rates dist plot ####
+
+emdf1 = select(magg2, sitecode, mean_daily_gpp_C=GPP_aq,
+    mean_daily_er_C=ER_aq)
+emdf1$source = 'streampulse'
+emdf2 = select(fnet, sitecode, mean_daily_gpp_C=GPP_terr,
+    mean_daily_er_C=ER_terr)
+emdf2$mean_daily_gpp_C = round(emdf2$mean_daily_gpp_C, 2)
+emdf2$mean_daily_er_C = round(emdf2$mean_daily_er_C, 2)
+emdf2$source = 'fluxnet'
+emdf = bind_rows(emdf1, emdf2) %>%
+    select(sitecode, source, everything()) %>%
+    arrange(source, sitecode)
+write.csv(emdf, 'output/final/terr_aq_daily_metab.csv', row.names=FALSE)
+
+zz = readRDS('output/filtered_dsets/no_filter.rds')
+zz = Map(function(x, y){
+    x$sitecode = y
+    return(x)
+}, zz, names(zz))
+zz = Reduce(rbind, zz)
+zq = zz %>%
+    # select(sitecode, GPP_C_filled, ER_C_filled) %>%
+    select(sitecode, GPP_C, ER_C) %>%
+    # select(sitecode, GPP_filled, ER_filled) %>%
+    group_by(sitecode) %>%
+    summarize_all(sum, na.rm=TRUE) %>%
+    rename(GPP_aq=GPP_C_filled, ER_aq=ER_C_filled) %>%
+    filter(! is.na(GPP_aq)) %>%
+    arrange(sitecode)
+head(zq)
+
+zzz = head(emdf[emdf$source=='streampulse',])
+zzz$mean_daily_gpp_C = zzz$mean_daily_gpp_C * 365
