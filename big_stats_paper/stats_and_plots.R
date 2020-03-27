@@ -22,11 +22,19 @@ phil_srcs = list.files('phil_stuff/metab_synthesis0/R/functions/',
     full.names=TRUE)
 for(x in phil_srcs) source(x)
 
+#these siteyears were problematic. 2 of them were rerun, but i'm ignoring that here
+dropsiteyears = data.frame(region=c('MD', 'MD', 'AZ', 'AZ'),
+    site=c('BARN', 'POBR', 'OC', 'MV'),
+    sitecode=c('MD_BARN', 'MD_POBR', 'AZ_OC', 'AZ_MV'),
+    year=c('2016', '2016', '2017', '2018'), stringsAsFactors=FALSE)
+dropsiteyears_p = apply(dropsiteyears[, c('region', 'site', 'year')], 1, paste, collapse='_')
+
 # model results from streampulse portal
 mods = query_available_results('all')[[1]] %>%
     as_tibble() %>%
     mutate_all(as.character)
-
+modx = apply(mods[, c('region', 'site', 'year')], 1, paste, collapse='_')
+mods = filter(mods, ! modx %in% dropsiteyears_p)
 #datasets from Phil
 fnet_list = readRDS('phil_stuff/FLUXNET_standardized.rds')
 fnames = names(fnet_list)
@@ -34,22 +42,96 @@ for(i in 1:length(fnet_list)){
     fnet_list[[i]]$sitecode = fnames[i]
 }
 fnet = Reduce(bind_rows, fnet_list)
+terr_metab_cov = fnet %>%
+    select(sitecode, GPP, ER, DOY) %>%
+    group_by(sitecode, DOY) %>%
+    summarize(GPP=mean(GPP, na.rm=TRUE),
+        ER=mean(ER, na.rm=TRUE)) %>%
+    ungroup() %>%
+    filter(! is.na(GPP) & ! is.na(ER)) %>%
+    group_by(sitecode) %>%
+    summarize(GPP_terr_mean=mean(GPP, na.rm=TRUE),
+        ER_terr_mean=mean(ER, na.rm=TRUE),
+        GPP_terr_sum=sum(GPP, na.rm=TRUE),
+        ER_terr_sum=sum(ER, na.rm=TRUE),
+        ndays=length(DOY)) %>%
+    mutate(coverage = ndays / 365)
 fnet = fnet %>%
     select(sitecode, GPP, ER) %>%
     group_by(sitecode) %>%
     summarize_all(mean, na.rm=TRUE) %>%
     rename(GPP_terr=GPP, ER_terr=ER)
 
-metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
+# metab_d = readRDS('phil_stuff/output/synthesis_standardized.rds')
+# metab_d = readRDS('phil_stuff/output/synthesis_gap_filled.rds')
+metab_d = readRDS('output/filtered_dsets/no_filter.rds')
 # metab_d = metab_d[! grepl('nwis', names(metab_d))]
 names(metab_d) = phil_to_mike_format(tibble(Site_ID=names(metab_d)), mods,
         arrange=FALSE) %>%
     pull(sitecode)
+pull_siteyear = metab_d[['AZ_OC']]
+metab_d[['AZ_OC']] = pull_siteyear[pull_siteyear$Year != 2017,]
+pull_siteyear = metab_d[['AZ_MV']]
+metab_d[['AZ_MV']] = pull_siteyear[pull_siteyear$Year != 2018,]
+# for(i in 1:nrow(dropsiteyears)){
+#     mtd = metab_d[[dropsiteyears$sitecode[i]]]
+#     if(! is.null(mtd)){
+#         filter(mtd, Year != dropsiteyears$year[i]
 mn = names(metab_d)
 for(i in 1:length(mn)){
     metab_d[[i]]$sitecode = mn[i]
 }
 magg = Reduce(bind_rows, metab_d)
+# head(magg)
+# zz = magg[is.na(magg$GPP_filled) | is.na(magg$ER_filled),]
+# unique(zz$sitecode)
+# colnames(zz)
+# qq = zz[zz$sitecode == 'AZ_LV', c('GPP','ER','GPP_filled','ER_filled')]
+# any(is.na(qq$ER_filled))
+
+# tt = tibble(s=c('a','a','a','a','b','b','b','b'), p=c('x','x','y','y','x','x','y','y'),
+#     z=c(1,2,3,4,5,6,NA,NA), x=c(1,2,NA,4,NA,NA,7,NA))
+# group_by(tt, s, p) %>% filter(! all(is.na(z)) & ! all(is.na(x)))
+
+# #THE ACTUAL GAPFILL FILTERING SECTION
+magg = magg %>%
+    group_by(sitecode, Year) %>%
+    filter(! all(is.na(GPP)) & ! all(is.na(ER))) %>%
+    ungroup()
+gapfilled_forreals = magg
+# saveRDS(gapfilled_forreals, 'output/final/gapPhilled_data.rds')
+
+# zq = gapfilled_forreals %>%
+#     group_by(sitecode, Year) %>%
+#     summarize(
+#         GPP=mean(GPP, na.rm=TRUE),
+#         GPPFna=mean(GPP_filled, na.rm=FALSE),
+#         GPPF=mean(GPP_filled, na.rm=TRUE),
+#         ER=mean(ER, na.rm=TRUE),
+#         ERFna=mean(ER_filled, na.rm=FALSE),
+#         ERF=mean(ER_filled, na.rm=TRUE)) %>%
+#     filter_at(vars(-sitecode, -Year), any_vars(is.na(.)))
+# sum(is.na(gapfilled_forreals$GPP_filled))
+# zzz = gapfilled_forreals[is.na(gapfilled_forreals$GPP_filled) | is.na(gapfilled_forreals$ER_filled),]
+# as.data.frame(zzz[zzz$sitecode=='AZ_LV',c('GPP','ER','GPP_filled','ER_filled')])
+# unique(zzz$sitecode)
+# qq = zz[zz$sitecode == 'AZ_LV', c('GPP','ER','GPP_filled','ER_filled')]
+# any(is.na(qq$ER_filled))
+
+aq_metab_cov = magg %>%
+    select(sitecode, GPP, ER, DOY) %>%
+    group_by(sitecode, DOY) %>%
+    summarize(GPP=mean(GPP, na.rm=TRUE),
+        ER=mean(ER, na.rm=TRUE)) %>%
+    ungroup() %>%
+    filter(! is.na(GPP) & ! is.na(ER)) %>%
+    group_by(sitecode) %>%
+    summarize(GPP_aq_mean=mean(GPP, na.rm=TRUE),
+        ER_aq_mean=mean(ER, na.rm=TRUE),
+        GPP_aq_sum=sum(GPP, na.rm=TRUE),
+        ER_aq_sum=sum(ER, na.rm=TRUE),
+        ndays=length(DOY)) %>%
+    mutate(coverage = ndays / 365)
 magg = magg %>%
     select(sitecode, GPP, ER) %>%
     group_by(sitecode) %>%
@@ -64,9 +146,12 @@ diag = filter(diag, ! is.na(ER_K))
 diag$ER_K = abs(diag$ER_K)
 diag = phil_to_mike_format(diag, mods) %>%
     select(-site, -region)
+diagx = apply(diag[, c('sitecode', 'Year')], 1, paste, collapse='_')
+diag = filter(diag, ! diagx %in% dropsiteyears_p)
 # diag = filter(diag, ! grepl('nwis', Site_ID)) %>%
 #     rename(sitecode=Site_ID)
 metr = as_tibble(readRDS('phil_stuff/output/site_metrics.rds'))
+# metr[metr$Site_ID %in% c('AZ_MV', 'AZ_OC'), c()]
 metr = readRDS('phil_stuff/output/metrics_bound.rds') %>%
     select(-one_of('Name', 'Source', 'Lat', 'Lon', 'COMID', 'VPU')) %>%
     as_tibble() %>%
@@ -84,12 +169,12 @@ metr = diag %>%
     right_join(metr, by='sitecode') %>%
     left_join(erXk_p_vals, by='sitecode') %>%
     select(-ER_K, -GPP_neg, -ER_pos, -num_days, -er_k_pval, everything())
-magg2 = metr %>%
-    select(sitecode, gpp_C_mean, er_C_mean) %>%
-    group_by(sitecode) %>%
-    summarize_all(mean, na.rm=TRUE) %>%
-    rename(GPP_aq=gpp_C_mean, ER_aq=er_C_mean) %>%
-    filter(! is.na(GPP_aq))
+# magg2 = metr %>% #uses biased means!
+#     select(sitecode, gpp_C_mean, er_C_mean) %>%
+#     group_by(sitecode) %>%
+#     summarize_all(mean, na.rm=TRUE) %>%
+#     rename(GPP_aq=gpp_C_mean, ER_aq=er_C_mean) %>%
+#     filter(! is.na(GPP_aq))
 
 mods = mutate(mods, sitecode=paste(region, site, sep='_'))
 
@@ -99,8 +184,9 @@ sites = as_tibble(readRDS('sites_COMID.rds')) #updated with NH sites
     # rename(sitecode=Site_ID)
 
 WGS84 = 4326 #EPSG code for coordinate reference system
-newsites = c('NH_BEF', 'NH_DCF', 'NH_GOF', 'NH_HBF', 'NH_MCQ', 'NH_SBM',
-    'NH_TPB', 'NH_WHB')
+# newsites = c('NH_BEF', 'NH_DCF', 'NH_GOF', 'NH_HBF', 'NH_MCQ', 'NH_SBM',
+#     'NH_TPB', 'NH_WHB') #scrapping these rather than running through Phil's data
+#acquisition process again
 
 # this section obsolete probably ####
 
@@ -435,6 +521,24 @@ mods = mods %>%
 
 spmods = filter(mods, Source == 'StreamPULSE')
 powmods = filter(mods, Source == 'USGS (Powell Center)')
+
+# 0 identify sites with >= 90% coverage and those with less ####
+
+# metr$num_days
+# nsiteyears = table(metr$sitecode)
+# site_coverage = tibble(sitecode=names(nsiteyears), nyears=unname(nsiteyears))
+# site_coverage = metr %>%
+#     group_by(sitecode) %>%
+#     summarize(sum_coverage=mean(num_days, na.rm=FALSE)) %>%
+#     right_join(site_coverage, by='sitecode') %>%
+#     mutate(mean_coverage = sum_coverage / nyears,
+#         prop_coverage = mean_coverage / 365)
+# sum(site_coverage$prop_coverage >= 0.5)
+
+aq_high_cov_sites = aq_metab_cov$sitecode[aq_metab_cov$coverage >= 0.9]
+aq_high_cov_bool = aq_metab_cov$sitecode %in% aq_high_cov_sites
+terr_high_cov_sites = terr_metab_cov$sitecode[terr_metab_cov$coverage >= 0.9]
+terr_high_cov_bool = terr_metab_cov$sitecode %in% terr_high_cov_sites
 
 # apply Philters and gapPhills; generate sub-datasets ####
 
@@ -1226,7 +1330,8 @@ pdf_plot_er_gpp = function(outfile, var='gpp', xlims){
     dev.off()
 }
 
-# 0 generate some additional metrics for four corners analyses ####
+# generate some additional metrics for four corners analyses (CAUTION) ####
+#CAUTION: this duplicates rows in metr
 
 if(mode == 'run'){
     sp_corr_coeffs = gpp_er_biplot(spmods, 'output/gppXer_sp.pdf', generate_r2s=TRUE)
@@ -1358,43 +1463,62 @@ pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
 
 # GPP-ER biplot and dist plots (Figure 1) ####
 
-pdf(file='output/final/gpp_er_biplot_cumulAnnual.pdf', width=8, height=8)
+# pdf(file='output/final/gpp_er_biplot_cumulAnnual.pdf', width=8, height=8)
+pdf(file='output/final/gpp_er_biplot_cumulAnnual_full.pdf', width=8, height=8)
 par(mar=c(4.5, 4.5, 2, 2))
 
-log_gpp_terr = log(fnet$GPP_terr * 365)
-log_er_terr = -1 * log(fnet$ER_terr * -365)
-log_gpp_aq = log(magg2$GPP_aq * 365)
-log_er_aq = -1 * log(magg2$ER_aq * -365)
+# log_gpp_terr = log(fnet$GPP_terr * 365)
+# log_er_terr = -1 * log(fnet$ER_terr * -365)
+# log_gpp_aq = log(magg2$GPP_aq * 365)
+# log_er_aq = -1 * log(magg2$ER_aq * -365)
+log_gpp_terr = log(terr_metab_cov$GPP_terr_sum)
+log_er_terr = log(terr_metab_cov$ER_terr_sum * -1) * -1
+log_gpp_aq = log(aq_metab_cov$GPP_aq_sum)
+log_er_aq = log(aq_metab_cov$ER_aq_sum * -1) * -1
 # log_gpp_aq = log(metr$gpp_C_mean * 365)
 # log_er_aq = -1 * log(metr$er_C_mean * -365)
-plot(log_gpp_terr, log_er_terr, col=alpha(terrcolor, alpha=0.5),
-    xlab='', ylab='', # xaxs='i', yaxs='i',
-    cex=2, cex.lab=1.2, cex.axis=1.2,
-    pch=20, yaxt='n', xaxt='n')
+plot(log_gpp_terr[terr_high_cov_bool],
+    log_er_terr[terr_high_cov_bool], col=alpha(terrcolor, alpha=0.5),
+    xlab='', ylab='', bg=alpha(terrcolor, alpha=0.5),# xaxs='i', yaxs='i',
+    cex=1.5, cex.lab=1.2, cex.axis=1.2, ylim=-log(c(10000, .2)),
+    pch=21, yaxt='n', xaxt='n', xlim=log(c(.03, 10000)), lwd=2)
 mtext(expression(paste("Cumulative GPP (gC"~"m"^"-2"*" y"^"-1"*')')),
     1, line=3)
 mtext(expression(paste("Cumulative ER (gC"~"m"^"-2"*" y"^"-1"*')')),
     2, line=3)
-points(log_gpp_aq, log_er_aq, col=alpha(aqcolor, alpha=0.5),
-    cex=2, pch=20)
-legend('topright', legend=c('FLUXNET', 'StreamPULSE'), pch=20, bty='n', pt.cex=2,
-    col=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)))
-
-all_gpp = c(fnet$GPP_terr * 365, metr$gpp_C_mean * 365)
+points(log_gpp_terr[! terr_high_cov_bool], log_er_terr[! terr_high_cov_bool],
+    col=alpha(terrcolor, alpha=0.5), cex=1.5, pch=21, bg='transparent', lwd=2)
+points(log_gpp_aq[aq_high_cov_bool], log_er_aq[aq_high_cov_bool], lwd=2,
+    col=alpha(aqcolor, alpha=0.5), cex=1.5, pch=21, bg=alpha(aqcolor, alpha=0.5))
+points(log_gpp_aq[! aq_high_cov_bool], log_er_aq[! aq_high_cov_bool], lwd=2,
+    col=alpha(aqcolor, alpha=0.5), cex=1.5, pch=21, bg='transparent')
+legend('topright', legend=c('FLUXNET', 'StreamPULSE'), pch=21, bty='n', pt.cex=1.5,
+    col=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)), pt.lwd=2,
+    pt.bg=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)), x.intersp=2)
+legend('topright', legend=c('FLUXNET', 'StreamPULSE'), pch=21, bty='n', pt.cex=1.5,
+    col=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)),
+    pt.bg='transparent', pt.lwd=2)
+# segments(log(770), log(.35) * -1, log(13000), log(.35) * -1, col='black')
+segments(log(1550), log(1.6) * -1, log(12500), log(1.6) * -1, col='black')
+# all_gpp = c(fnet$GPP_terr * 365, metr$gpp_C_mean * 365)
+all_gpp = c(terr_metab_cov$GPP_terr_sum, aq_metab_cov$GPP_aq_sum)
 all_gpp[all_gpp <= 0] = NA
 gpprng = range(all_gpp, na.rm=TRUE)
-all_er = c(fnet$ER_terr * 365, metr$er_C_mean * 365)
+# all_er = c(fnet$ER_terr * 365, metr$er_C_mean * 365)
+all_er = c(terr_metab_cov$ER_terr_sum, aq_metab_cov$ER_aq_sum)
 all_er[all_er >= 0] = NA
 errng = range(all_er, na.rm=TRUE)
 
 # gpptck = c(0.04, 0.25, 1, 2, 4, 8, 11.8) * 365
-gpptck = c(14.6, 100, 1000, 4307)
+gpptck = c(0.01, 0.1, 1, 10, 100, 1000, 10000)
+# gpptck = c(14.6, 100, 1000, 4307)
 gpptck_log = log(gpptck)
 axis(1, at=gpptck_log, labels=gpptck)
 # ertck = seq(errng[1], errng[2], length.out=20)
 # ertck_log = log(ertck * -1) * -1
 # ertck = rev(c(14.3, 8, 4, 2, 1, 0.25, 0.06) * 365)
-ertck = rev(c(5215, 1000, 100, 21.9))
+# ertck = rev(c(5215, 1000, 100, 21.9))
+ertck = rev(c(10000, 1000, 100, 10, 1, 0.1, 0.01))
 ertck_log = log(ertck) * -1
 axis(2, at=ertck_log, labels=ertck * -1)
 
@@ -1404,15 +1528,17 @@ dev.off()
 #---
 
 pdf(file='output/final/gpp_er_distplots.pdf', width=8, height=8)
+# par(mfrow=c(2, 1), mar=c(4,4,1,1), oma=c(0, 0, 0, 0))
 par(mfrow=c(2, 1), mar=c(1,1,1,1), oma=c(0, 0, 0, 0))
 
-dens = density(na.omit(log_gpp_terr))
+dens = density(na.omit(log_gpp_terr[terr_high_cov_bool]))
 gpp_dens_terr = tibble(x=dens$x, y=dens$y)
-dens = density(na.omit(log_gpp_aq))
+dens = density(na.omit(log_gpp_aq[aq_high_cov_bool]))
 gpp_dens_aq = tibble(x=dens$x, y=dens$y)
 
 plot(gpp_dens_terr$x, gpp_dens_terr$y, type='n', ann=FALSE, xaxt='n', yaxt='n',
-    bty='n')
+    bty='n', xlim=c(0,9.5))
+# axis(1, at=gpptck_log, labels=gpptck)
 mtext('GPP', 1, line=0)
 polygon(x=c(gpp_dens_terr$x, rev(gpp_dens_terr$x)),
     y=c(gpp_dens_terr$y, rep(0, nrow(gpp_dens_terr))),
@@ -1423,15 +1549,16 @@ polygon(x=c(gpp_dens_aq$x, rev(gpp_dens_aq$x)),
     col=alpha(aqcolor, alpha=0.7),
     border=alpha(aqcolor, alpha=0.7))
 
-dens = density(na.omit(log_er_terr))
+dens = density(na.omit(log_er_terr[terr_high_cov_bool]))
 er_dens_terr = tibble(x=dens$x, y=dens$y)
-dens = density(na.omit(log_er_aq))
+dens = density(na.omit(log_er_aq[aq_high_cov_bool]))
 er_dens_aq = tibble(x=dens$x, y=dens$y)
 
 plot(er_dens_terr$x, er_dens_terr$y, type='n', ann=FALSE, xaxt='n', yaxt='n',
-    bty='n')
+    bty='n', xlim=c(1, -10))
+# axis(1, at=ertck_log, labels=ertck)
 mtext('ER', 1, line=0)
-polygon(x=c(er_dens_terr$x, rev(er_dens_terr$x)),
+polygon(x=c(rev(er_dens_terr$x), er_dens_terr$x),
     y=c(rev(er_dens_terr$y), rep(0, nrow(er_dens_terr))),
     col=alpha(terrcolor, alpha=0.7),
     border=alpha(terrcolor, alpha=0.7))
@@ -1872,7 +1999,7 @@ full_siteframe = tibble(sitecode=rep(names(yr_list),
 
 write.csv(full_siteframe, 'nwis_siteyears_full.csv', row.names=FALSE)
 
-#sp siteyear list ####
+# sp siteyear list ####
 mnms = names(metab_d)
 sp_d = metab_d[! grepl('nwis', mnms)]
 sp_yr_list = lapply(sp_d, function(x) unique(x$Year))
@@ -1895,18 +2022,43 @@ write.csv(sp_siteframe, 'sp_siteyears_full.csv', row.names=FALSE)
 
 # PAR vs Qar1 by gpp ####
 
+aq_metab_cov2 = select(aq_metab_cov, sitecode,
+    GPP_aq_sum, ER_aq_sum, GPP_aq_mean, ER_aq_mean) %>%
+    right_join(metr, by='sitecode')
+# logGPP = log(aq_metab_cov2$GPP_aq_mean)
+# gpprng = range(logGPP, na.rm=TRUE)
+# rescaled = ((logGPP - gpprng[1]) /
+#         (gpprng[2] - gpprng[1])) * (3 - 0.5) + 1
+
 pdf('output/final/light_vs_flow_by_gpp.pdf', height=8, width=8)
 par(mar=c(5, 5, 4, 6))
-gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
-rescaled = ((metr$gpp_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
-plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
+
+modGPP = aq_metab_cov2$GPP_aq_sum
+gpprng = range(modGPP, na.rm=TRUE)
+rescaled = ((modGPP - gpprng[1]) /
+        (gpprng[2] - gpprng[1])) * (5 - 1) + 1
+
+plot(aq_metab_cov2$Stream_PAR_sum[aq_high_cov_bool],
+    aq_metab_cov2$Disch_ar1[aq_high_cov_bool], pch=21,
     xlab='Light Availability (Mean Annual Surface PAR)',
     ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
-    col=alpha('darkgreen', alpha=0.5), bty='o',
-    xpd=NA, main='', cex=rescaled, font.lab=2)
-legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
-    pt.cex=c(1, 2, 3, 4), col=alpha('darkgreen', alpha=0.5), xpd=NA,
-    inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nGPP'))))
+    col=alpha('darkgreen', alpha=0.5), bty='o', xlim=c(2, 15.5), ylim=c(0.1, 1),
+    # xpd=NA, main='', cex=log(aq_metab_cov$GPP_aq_sum), font.lab=2)
+    xpd=NA, main='', cex=rescaled[aq_high_cov_bool], font.lab=2,
+    bg=alpha('darkgreen', alpha=0.5))
+points(aq_metab_cov2$Stream_PAR_sum[! aq_high_cov_bool],
+    aq_metab_cov2$Disch_ar1[! aq_high_cov_bool], pch=21,
+    col=alpha('darkgreen', alpha=0.5), bg='transparent', cex=rescaled[! aq_high_cov_bool])
+
+# legend('right', legend=c(round(gpprng[1], 2), '', '', round(gpprng[2], 0)),
+legend('right', legend=c(expression(paste(10^-2)), '', '', expression(paste(10^5))),
+    bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
+    pt.cex=c(1, 2, 3, 5), col='gray30', xpd=NA, y.intersp=c(1, 2, 1.2, 1.6),
+    inset=c(-0.16, 0), title='')
+legend('right', legend=c('','','',''),
+    bty='n', pch=21, pt.bg='transparent', x.intersp=1.5,
+    pt.cex=c(1, 2, 3, 5), col='transparent', xpd=NA,
+    inset=c(-0.15, 0), title=expression(paste(bold('Cumul.\nAnnual\nGPP'))))
 dev.off()
 
 
@@ -1916,13 +2068,19 @@ pdf('output/final/light_vs_flow_by_gpp_corners.pdf', height=8, width=8)
 # lmod = lm(metr$Disch_ar1 ~ metr$Stream_PAR_sum)
 # zz = scales::rescale(metr$gpp_C_mean, to=c(1, 3))
 par(mar=c(5, 5, 4, 6))
-gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
-rescaled = ((metr$gpp_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
-# plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20, xlab='Light Availability',
-plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
+
+modGPP = aq_metab_cov2$GPP_aq_sum
+gpprng = range(modGPP, na.rm=TRUE)
+rescaled = ((modGPP - gpprng[1]) /
+        (gpprng[2] - gpprng[1])) * (6 - 1) + 1
+
+# gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
+# rescaled = ((metr$gpp_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
+# plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
+plot(aq_metab_cov2$Stream_PAR_sum, aq_metab_cov2$Disch_ar1, pch=20,
     xlab='Light Availability (Mean Annual Surface PAR)',
     ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
-    col=alpha('gray60', alpha=0.5), bty='o',
+    col=alpha('gray60', alpha=0.5), bty='o', xlim=c(2, 15.5), ylim=c(0.1, 1),
     # col=alpha('darkgreen', alpha=0.5), bty='u',
     xpd=NA, main='', cex=rescaled, font.lab=2)
 points(metr[bright_stable, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
@@ -1944,9 +2102,9 @@ points(metr[dark_dull, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
 # cex.main=0.8)
 # abline(lmod, lty=2, col='blue')
 legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
-    pt.cex=c(1, 2, 3, 4), col=alpha('gray60', alpha=0.5), xpd=NA,
+    pt.cex=c(1, 2, 3, 5), col=alpha('gray60', alpha=0.5), xpd=NA,
     # pt.cex=c(1, 2, 3, 4), col=alpha('darkgreen', alpha=0.5), xpd=NA,
-    inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nGPP'))))
+    inset=c(-0.15, 0), title=expression(paste(bold('Cumul.\nAnnual\nGPP'))))
 dev.off()
 
 
@@ -2027,35 +2185,35 @@ metr$
 }
 # df for emily to build annual rates dist plot ####
 
-emdf1 = select(magg2, sitecode, mean_daily_gpp_C=GPP_aq,
-    mean_daily_er_C=ER_aq)
+emdf1 = select(aq_metab_cov, sitecode, sum_gpp_C=GPP_aq_sum,
+    sum_er_C=ER_aq_sum)
 emdf1$source = 'streampulse'
-emdf2 = select(fnet, sitecode, mean_daily_gpp_C=GPP_terr,
-    mean_daily_er_C=ER_terr)
-emdf2$mean_daily_gpp_C = round(emdf2$mean_daily_gpp_C, 2)
-emdf2$mean_daily_er_C = round(emdf2$mean_daily_er_C, 2)
+emdf2 = select(terr_metab_cov, sitecode, sum_gpp_C=GPP_terr_sum,
+    sum_er_C=ER_terr_sum)
+emdf2$sum_gpp_C = round(emdf2$sum_gpp_C, 2)
+emdf2$sum_er_C = round(emdf2$sum_er_C, 2)
 emdf2$source = 'fluxnet'
 emdf = bind_rows(emdf1, emdf2) %>%
     select(sitecode, source, everything()) %>%
     arrange(source, sitecode)
-write.csv(emdf, 'output/final/terr_aq_daily_metab.csv', row.names=FALSE)
-
-zz = readRDS('output/filtered_dsets/no_filter.rds')
-zz = Map(function(x, y){
-    x$sitecode = y
-    return(x)
-}, zz, names(zz))
-zz = Reduce(rbind, zz)
-zq = zz %>%
-    # select(sitecode, GPP_C_filled, ER_C_filled) %>%
-    select(sitecode, GPP_C, ER_C) %>%
-    # select(sitecode, GPP_filled, ER_filled) %>%
-    group_by(sitecode) %>%
-    summarize_all(sum, na.rm=TRUE) %>%
-    rename(GPP_aq=GPP_C_filled, ER_aq=ER_C_filled) %>%
-    filter(! is.na(GPP_aq)) %>%
-    arrange(sitecode)
-head(zq)
-
-zzz = head(emdf[emdf$source=='streampulse',])
-zzz$mean_daily_gpp_C = zzz$mean_daily_gpp_C * 365
+write.csv(emdf, 'output/final/terr_aq_cumul_metab.csv', row.names=FALSE)
+# plot(log(emdf$sum_gpp_C), log(emdf$sum_er_C * -1) * -1)
+# zz = readRDS('output/filtered_dsets/no_filter.rds')
+# zz = Map(function(x, y){
+#     x$sitecode = y
+#     return(x)
+# }, zz, names(zz))
+# zz = Reduce(rbind, zz)
+# zq = zz %>%
+#     # select(sitecode, GPP_C_filled, ER_C_filled) %>%
+#     select(sitecode, GPP_C, ER_C) %>%
+#     # select(sitecode, GPP_filled, ER_filled) %>%
+#     group_by(sitecode) %>%
+#     summarize_all(sum, na.rm=TRUE) %>%
+#     rename(GPP_aq=GPP_C_filled, ER_aq=ER_C_filled) %>%
+#     filter(! is.na(GPP_aq)) %>%
+#     arrange(sitecode)
+# head(zq)
+#
+# zzz = head(emdf[emdf$source=='streampulse',])
+# zzz$mean_daily_gpp_C = zzz$mean_daily_gpp_C * 365
