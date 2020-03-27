@@ -2024,7 +2024,7 @@ write.csv(sp_siteframe, 'sp_siteyears_full.csv', row.names=FALSE)
 
 aq_metab_cov2 = select(aq_metab_cov, sitecode,
     GPP_aq_sum, ER_aq_sum, GPP_aq_mean, ER_aq_mean) %>%
-    right_join(metr, by='sitecode')
+    left_join(metr, by='sitecode')
 # logGPP = log(aq_metab_cov2$GPP_aq_mean)
 # gpprng = range(logGPP, na.rm=TRUE)
 # rescaled = ((logGPP - gpprng[1]) /
@@ -2072,38 +2072,97 @@ par(mar=c(5, 5, 4, 6))
 modGPP = aq_metab_cov2$GPP_aq_sum
 gpprng = range(modGPP, na.rm=TRUE)
 rescaled = ((modGPP - gpprng[1]) /
-        (gpprng[2] - gpprng[1])) * (6 - 1) + 1
+        (gpprng[2] - gpprng[1])) * (5 - 1) + 1
 
 # gpprng = range(metr$gpp_C_mean, na.rm=TRUE)
 # rescaled = ((metr$gpp_C_mean - gpprng[1]) / (gpprng[2] - gpprng[1])) * (4 - 1) + 1
 # plot(metr$Stream_PAR_sum, metr$Disch_ar1, pch=20,
-plot(aq_metab_cov2$Stream_PAR_sum, aq_metab_cov2$Disch_ar1, pch=20,
-    xlab='Light Availability (Mean Annual Surface PAR)',
+ovboolY = aq_high_cov_bool & ! aq_metab_cov2$sitecode  %in% c(bs_sites, ds_sites, dd_sites, be_sites)
+ov1Y = aq_metab_cov2$Stream_PAR_sum[ovboolY]
+ov2Y = aq_metab_cov2$Disch_ar1[ovboolY]
+plot(ov1Y, ov2Y, pch=21, lwd=2,
+    xlab='Light Availability (Mean Annual Surface PAR)', bg=alpha('gray60', alpha=0.5),
     ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
     col=alpha('gray60', alpha=0.5), bty='o', xlim=c(2, 15.5), ylim=c(0.1, 1),
     # col=alpha('darkgreen', alpha=0.5), bty='u',
-    xpd=NA, main='', cex=rescaled, font.lab=2)
-points(metr[bright_stable, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
-    metr[bright_stable, 'Disch_ar1', drop=TRUE], cex=rescaled[bright_stable],
-    # pch=20, col=alpha('black', alpha=0.5))
-    pch=20, col='black')
-points(metr[bright_erratic, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
-    metr[bright_erratic, 'Disch_ar1', drop=TRUE], cex=rescaled[bright_erratic],
-    pch=20, col='blue')
-points(metr[er, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
-    metr[er, 'Disch_ar1', drop=TRUE], cex=rescaled[er],
-    pch=20, col='orange')
-points(metr[dark_dull, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
-    metr[dark_dull, 'Disch_ar1', drop=TRUE], cex=rescaled[dark_dull],
-    pch=20, col='red')
+    xpd=NA, main='', cex=rescaled[ovboolY], font.lab=2)
+ovboolN = ! aq_high_cov_bool & ! aq_metab_cov2$sitecode  %in% c(bs_sites, ds_sites, dd_sites, be_sites)
+ov1N = aq_metab_cov2$Stream_PAR_sum[ovboolN]
+ov2N = aq_metab_cov2$Disch_ar1[ovboolN]
+points(ov1N, ov2N, pch=21, lwd=2,
+    col=alpha('gray60', alpha=0.5), bg='transparent', cex=rescaled[ovboolN])
+# metr[bright_stable, 'Stream_PAR_sum', drop=TRUE]
+
+bsboolY = aq_high_cov_bool & aq_metab_cov2$sitecode %in% bs_sites
+bs1Y = aq_metab_cov2$Stream_PAR_sum[bsboolY]
+bs2Y = aq_metab_cov2$Disch_ar1[bsboolY]
+points(bs1Y, bs2Y, xpd=NA, cex=rescaled[bsboolY], lwd=2,
+    pch=21, col=alpha('black', alpha=0.5), bg=alpha('black', alpha=0.5))
+bsboolN = ! aq_high_cov_bool & aq_metab_cov2$sitecode %in% bs_sites
+bs1N = aq_metab_cov2$Stream_PAR_sum[bsboolN]
+bs2N = aq_metab_cov2$Disch_ar1[bsboolN]
+points(bs1N, bs2N, xpd=NA, cex=rescaled[bsboolN], lwd=2,
+    pch=21, col=alpha('black', alpha=0.5), bg='transparent')
+
+dsboolY = aq_high_cov_bool & aq_metab_cov2$sitecode %in% ds_sites
+ds1Y = aq_metab_cov2$Stream_PAR_sum[dsboolY]
+ds2Y = aq_metab_cov2$Disch_ar1[dsboolY]
+points(ds1Y, ds2Y, xpd=NA, cex=rescaled[dsboolY], lwd=2,
+    pch=21, col=alpha('blue', alpha=0.5), bg=alpha('blue', alpha=0.5))
+dsboolN = ! aq_high_cov_bool & aq_metab_cov2$sitecode %in% ds_sites
+ds1N = aq_metab_cov2$Stream_PAR_sum[dsboolN]
+ds2N = aq_metab_cov2$Disch_ar1[dsboolN]
+points(ds1N, ds2N, xpd=NA, cex=rescaled[dsboolN], lwd=2,
+    pch=21, col=alpha('blue', alpha=0.5), bg='transparent')
+
+beboolY = aq_high_cov_bool & aq_metab_cov2$sitecode %in% be_sites
+be1Y = aq_metab_cov2$Stream_PAR_sum[beboolY]
+be2Y = aq_metab_cov2$Disch_ar1[beboolY]
+points(be1Y, be2Y, xpd=NA, cex=rescaled[beboolY], lwd=2,
+    pch=21, col=alpha('orange', alpha=0.5), bg=alpha('orange', alpha=0.5))
+beboolN = ! aq_high_cov_bool & aq_metab_cov2$sitecode %in% be_sites
+be1N = aq_metab_cov2$Stream_PAR_sum[beboolN]
+be2N = aq_metab_cov2$Disch_ar1[beboolN]
+points(be1N, be2N, xpd=NA, cex=rescaled[beboolN], lwd=2,
+    pch=21, col=alpha('orange', alpha=0.5), bg='transparent')
+
+ddboolY = aq_high_cov_bool & aq_metab_cov2$sitecode %in% dd_sites
+dd1Y = aq_metab_cov2$Stream_PAR_sum[ddboolY]
+dd2Y = aq_metab_cov2$Disch_ar1[ddboolY]
+points(dd1Y, dd2Y, xpd=NA, cex=rescaled[ddboolY], lwd=2,
+    pch=21, col=alpha('red', alpha=0.5), bg=alpha('red', alpha=0.5))
+ddboolN = ! aq_high_cov_bool & aq_metab_cov2$sitecode %in% dd_sites
+dd1N = aq_metab_cov2$Stream_PAR_sum[ddboolN]
+dd2N = aq_metab_cov2$Disch_ar1[ddboolN]
+points(dd1N, dd2N, xpd=NA, cex=rescaled[ddboolN], lwd=2,
+    pch=21, col=alpha('red', alpha=0.5), bg='transparent')
+# points(metr[bright_erratic, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+#     metr[bright_erratic, 'Disch_ar1', drop=TRUE], cex=rescaled[bright_erratic],
+#     pch=20, col='blue')
+# points(metr[er, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+#     metr[er, 'Disch_ar1', drop=TRUE], cex=rescaled[er],
+#     pch=20, col='orange')
+# points(metr[dark_dull, 'Stream_PAR_sum', drop=TRUE], xpd=NA,
+#     metr[dark_dull, 'Disch_ar1', drop=TRUE], cex=rescaled[dark_dull],
+#     pch=20, col='red')
+
 # main=paste(paste('R^2:', round(summary(lmod)$adj.r.squared, 2), '\n'),
 # expression(paste('size'~alpha~'GPP'))),
 # main=paste0('R^2: ', round(summary(lmod)$adj.r.squared, 2), '; size=GPP'),
 # cex.main=0.8)
 # abline(lmod, lty=2, col='blue')
-legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
-    pt.cex=c(1, 2, 3, 5), col=alpha('gray60', alpha=0.5), xpd=NA,
-    # pt.cex=c(1, 2, 3, 4), col=alpha('darkgreen', alpha=0.5), xpd=NA,
+
+# legend('right', legend=c(gpprng[1], '', '', gpprng[2]), pch=20, bty='n',
+#     pt.cex=c(1, 2, 3, 5), col=alpha('gray60', alpha=0.5), xpd=NA,
+#     # pt.cex=c(1, 2, 3, 4), col=alpha('darkgreen', alpha=0.5), xpd=NA,
+#     inset=c(-0.15, 0), title=expression(paste(bold('Cumul.\nAnnual\nGPP'))))
+legend('right', legend=c(expression(paste(10^-2)), '', '', expression(paste(10^5))),
+    bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
+    pt.cex=c(1, 2, 3, 5), col='gray30', xpd=NA, y.intersp=c(1, 2, 1.2, 1.6),
+    inset=c(-0.16, 0), title='')
+legend('right', legend=c('','','',''),
+    bty='n', pch=21, pt.bg='transparent', x.intersp=1.5,
+    pt.cex=c(1, 2, 3, 5), col='transparent', xpd=NA,
     inset=c(-0.15, 0), title=expression(paste(bold('Cumul.\nAnnual\nGPP'))))
 dev.off()
 
