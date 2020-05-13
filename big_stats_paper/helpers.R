@@ -204,6 +204,22 @@ consolidate_list = function(daily_summaries){
     return(smry)
 }
 
+consolidate_list_withnames = function(daily_summaries){
+
+    daily_summaries = Map(function(x){
+        if(is.null(x)) return()
+        x = select(x, sitename, DOY, GPP_C_filled, ER_C_filled, NEP_C_filled)
+        return(x)
+    }, daily_summaries)
+
+    smry = Reduce(function(x, y){
+        out = bind_rows(x, y)
+        return(out)
+    }, daily_summaries)
+
+    return(smry)
+}
+
 phil_to_mike_format = function(dset, mod_dset, arrange=TRUE){
 
     nwis_ind = substr(dset$Site_ID, 1, 4) == 'nwis'

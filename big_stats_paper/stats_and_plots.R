@@ -118,8 +118,23 @@ gapfilled_forreals = magg
 # qq = zz[zz$sitecode == 'AZ_LV', c('GPP','ER','GPP_filled','ER_filled')]
 # any(is.na(qq$ER_filled))
 
-aq_metab_cov = magg %>%
+#GENERATED FIG1 WITH GPP AND ER AS GRAMS O2 BY ACCIDENT HERE.
+#FIXED IT BY RENAMING THE CORRECT COLS (e.g. GPP_C_filled) TO THE INCORRECT
+#COLS (e.g. GPP)
+aq_cov = magg %>%
     select(sitecode, GPP, ER, DOY) %>%
+    group_by(sitecode, DOY) %>%
+    summarize(GPP=mean(GPP, na.rm=TRUE),
+        ER=mean(ER, na.rm=TRUE)) %>%
+    ungroup() %>%
+    filter(! is.na(GPP) & ! is.na(ER)) %>%
+    group_by(sitecode) %>%
+    summarize(ndays=length(DOY)) %>%
+    mutate(coverage = ndays / 365)
+aq_metab_cov = magg %>%
+    select(sitecode, GPP=GPP_C_filled, ER=ER_C_filled, DOY) %>%
+    mutate(GPP=ifelse(GPP <= 0, .0000001, GPP)) %>%
+    mutate(ER=ifelse(ER >= 0, -.0000001, ER)) %>%
     group_by(sitecode, DOY) %>%
     summarize(GPP=mean(GPP, na.rm=TRUE),
         ER=mean(ER, na.rm=TRUE)) %>%
@@ -129,16 +144,18 @@ aq_metab_cov = magg %>%
     summarize(GPP_aq_mean=mean(GPP, na.rm=TRUE),
         ER_aq_mean=mean(ER, na.rm=TRUE),
         GPP_aq_sum=sum(GPP, na.rm=TRUE),
-        ER_aq_sum=sum(ER, na.rm=TRUE),
-        ndays=length(DOY)) %>%
-    mutate(coverage = ndays / 365)
-magg = magg %>%
-    select(sitecode, GPP, ER) %>%
-    group_by(sitecode) %>%
-    summarize_all(mean, na.rm=TRUE) %>%
-    rename(GPP_aq=GPP, ER_aq=ER)
+        ER_aq_sum=sum(ER, na.rm=TRUE)) %>%
+    left_join(aq_cov)
+
+# magg = magg %>%
+#     select(sitecode, GPP, ER) %>%
+#     group_by(sitecode) %>%
+#     summarize_all(mean, na.rm=TRUE) %>%
+#     rename(GPP_aq=GPP, ER_aq=ER)
 erXk_p_vals = sapply(metab_d, function(x){
-    summary(lm(x$ER~x$K600))$coefficients[2,4]
+    zz = try(summary(lm(x$ER~x$K600))$coefficients[2,4])
+    if('try-error' %in% class(zz)){return(NA)}
+    return(zz)
 })
 erXk_p_vals = tibble(sitecode=names(erXk_p_vals), er_k_pval=erXk_p_vals)
 diag = as_tibble(readRDS('phil_stuff/metab_synthesis/output/yearly_diagnostics.rds'))
@@ -537,6 +554,8 @@ powmods = filter(mods, Source == 'USGS (Powell Center)')
 
 aq_high_cov_sites = aq_metab_cov$sitecode[aq_metab_cov$coverage >= 0.9]
 aq_high_cov_bool = aq_metab_cov$sitecode %in% aq_high_cov_sites
+aq_high_cov_sites_60 = aq_metab_cov$sitecode[aq_metab_cov$coverage >= 0.6]
+aq_high_cov_bool_60 = aq_metab_cov$sitecode %in% aq_high_cov_sites_60
 terr_high_cov_sites = terr_metab_cov$sitecode[terr_metab_cov$coverage >= 0.9]
 terr_high_cov_bool = terr_metab_cov$sitecode %in% terr_high_cov_sites
 
@@ -905,6 +924,10 @@ er_k_filter_plot = function(diagnostics, outfile){
     dev.off()
 }
 
+# readfile='output/filtered_dsets/no_filter.rds'
+# diagnostics=diag; sitedata=sites; quant_filt='width_calc <= 1'
+# standalone=TRUE; outfile='output/final/lips_overall_stream.pdf'
+# filter_label=FALSE
 lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     standalone, outfile, filter_label=TRUE, ...){
 
@@ -934,6 +957,24 @@ lips_plot = function(readfile, datlist, diagnostics, sitedata, quant_filt=NULL,
     # nsites_included = sum(names(filt) %in%
     #     sitedata$sitecode[! is.na(sitedata$gpp_C_amp)])
     nsites_included = sum(sapply(filt, nrow) > 0)
+
+    # fnz = names(filt)
+    # for(i in 1:length(filt)){
+    #     filt[[i]]$sitename = fnz[i]
+    # }
+    #
+    # smry = consolidate_list_withnames(filt) %>%
+    #     as_tibble() %>%
+    #     group_by(sitename, DOY) %>%
+    #     summarize_all(list(median=~median(., na.rm=TRUE),
+    #         mean=~mean(., na.rm=TRUE),
+    #         quant25=~quantile(., na.rm=TRUE)[2],
+    #         quant75=~quantile(., na.rm=TRUE)[4]))
+    #
+    # cam = smry %>%
+    #     group_by(sitename) %>%
+    #     summarize(cumul_annual_mean=sum(GPP_C_filled_mean, na.rm=TRUE))
+
 
     smry = consolidate_list(filt) %>%
         as_tibble() %>%
@@ -1463,8 +1504,8 @@ pdf_plot_er_gpp('output/day2/ER_PDFs.pdf', 'er', erlim)
 
 # GPP-ER biplot and dist plots (Figure 1) ####
 
-# pdf(file='output/final/gpp_er_biplot_cumulAnnual.pdf', width=8, height=8)
-pdf(file='output/final/gpp_er_biplot_cumulAnnual_full.pdf', width=8, height=8)
+pdf(file='output/final/gpp_er_biplot_cumulAnnual.pdf', width=8, height=8)
+# pdf(file='output/final/gpp_er_biplot_cumulAnnual_full.pdf', width=8, height=8)
 par(mar=c(4.5, 4.5, 2, 2))
 
 # log_gpp_terr = log(fnet$GPP_terr * 365)
@@ -1480,8 +1521,10 @@ log_er_aq = log(aq_metab_cov$ER_aq_sum * -1) * -1
 plot(log_gpp_terr[terr_high_cov_bool],
     log_er_terr[terr_high_cov_bool], col=alpha(terrcolor, alpha=0.5),
     xlab='', ylab='', bg=alpha(terrcolor, alpha=0.5),# xaxs='i', yaxs='i',
-    cex=1.5, cex.lab=1.2, cex.axis=1.2, ylim=-log(c(10000, .2)),
-    pch=21, yaxt='n', xaxt='n', xlim=log(c(.03, 10000)), lwd=2)
+    # cex=1.5, cex.lab=1.2, cex.axis=1.2, ylim=-log(c(10000, 1)),
+    # pch=21, yaxt='n', xaxt='n', xlim=log(c(1, 10000)), lwd=2)
+    cex=1.5, cex.lab=1.2, cex.axis=1.2, ylim=-log(c(10000, .1)),
+    pch=21, yaxt='n', xaxt='n', xlim=log(c(.01, 10000)), lwd=2)
 mtext(expression(paste("Cumulative GPP (gC"~"m"^"-2"*" y"^"-1"*')')),
     1, line=3)
 mtext(expression(paste("Cumulative ER (gC"~"m"^"-2"*" y"^"-1"*')')),
@@ -1499,7 +1542,8 @@ legend('topright', legend=c('FLUXNET', 'StreamPULSE'), pch=21, bty='n', pt.cex=1
     col=c(alpha(terrcolor, alpha=0.5), alpha(aqcolor, alpha=0.5)),
     pt.bg='transparent', pt.lwd=2)
 # segments(log(770), log(.35) * -1, log(13000), log(.35) * -1, col='black')
-segments(log(1550), log(1.6) * -1, log(12500), log(1.6) * -1, col='black')
+# segments(log(1550), log(1.6) * -1, log(12500), log(1.6) * -1, col='black')
+# segments(log(1550), log(1.6) * -1, log(12500), log(1.6) * -1, col='black')
 # all_gpp = c(fnet$GPP_terr * 365, metr$gpp_C_mean * 365)
 all_gpp = c(terr_metab_cov$GPP_terr_sum, aq_metab_cov$GPP_aq_sum)
 all_gpp[all_gpp <= 0] = NA
@@ -1509,16 +1553,14 @@ all_er = c(terr_metab_cov$ER_terr_sum, aq_metab_cov$ER_aq_sum)
 all_er[all_er >= 0] = NA
 errng = range(all_er, na.rm=TRUE)
 
-# gpptck = c(0.04, 0.25, 1, 2, 4, 8, 11.8) * 365
+# gpptck = c(1, 10, 100, 1000, 10000)
 gpptck = c(0.01, 0.1, 1, 10, 100, 1000, 10000)
-# gpptck = c(14.6, 100, 1000, 4307)
 gpptck_log = log(gpptck)
 axis(1, at=gpptck_log, labels=gpptck)
 # ertck = seq(errng[1], errng[2], length.out=20)
 # ertck_log = log(ertck * -1) * -1
-# ertck = rev(c(14.3, 8, 4, 2, 1, 0.25, 0.06) * 365)
-# ertck = rev(c(5215, 1000, 100, 21.9))
 ertck = rev(c(10000, 1000, 100, 10, 1, 0.1, 0.01))
+# ertck = rev(c(10000, 1000, 100, 10, 1))
 ertck_log = log(ertck) * -1
 axis(2, at=ertck_log, labels=ertck * -1)
 
@@ -2025,6 +2067,8 @@ write.csv(sp_siteframe, 'sp_siteyears_full.csv', row.names=FALSE)
 aq_metab_cov2 = select(aq_metab_cov, sitecode,
     GPP_aq_sum, ER_aq_sum, GPP_aq_mean, ER_aq_mean) %>%
     left_join(metr, by='sitecode')
+    # filter(GPP_aq_sum > 1) %>%
+    # filter(ER_aq_sum < -1)
 # logGPP = log(aq_metab_cov2$GPP_aq_mean)
 # gpprng = range(logGPP, na.rm=TRUE)
 # rescaled = ((logGPP - gpprng[1]) /
@@ -2051,7 +2095,7 @@ points(aq_metab_cov2$Stream_PAR_sum[! aq_high_cov_bool],
     col=alpha('darkgreen', alpha=0.5), bg='transparent', cex=rescaled[! aq_high_cov_bool])
 
 # legend('right', legend=c(round(gpprng[1], 2), '', '', round(gpprng[2], 0)),
-legend('right', legend=c(expression(paste(10^-2)), '', '', expression(paste(10^5))),
+legend('right', legend=c(expression(paste(0.01)), '', '', expression(paste(4000))),
     bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
     pt.cex=c(1, 2, 3, 5), col='gray30', xpd=NA, y.intersp=c(1, 2, 1.2, 1.6),
     inset=c(-0.16, 0), title='')
@@ -2167,7 +2211,7 @@ legend('right', legend=c('','','',''),
 dev.off()
 
 
-# PAR vs Qar1 by er ####
+# PAR vs Qar1 by er (obsolete) ####
 
 pdf('output/final/light_vs_flow_by_er.pdf', height=8, width=8)
 par(mar=c(5, 5, 4, 6))
@@ -2186,6 +2230,76 @@ legend('right', legend=c(errng[1], '', '', errng[2]), pch=20, bty='n',
     inset=c(-0.15, 0), title=expression(paste(bold('Mean\nAnnual\nER'))))
 dev.off()
 
+
+# PAR vs Qar1 by er (for reals; needs obj created in PAR vs Qar1 by gpp) ####
+
+pdf('output/final/light_vs_flow_by_er.pdf', height=8, width=8)
+par(mar=c(5, 5, 4, 6))
+
+modER = abs(aq_metab_cov2$ER_aq_sum)
+errng = range(modER, na.rm=TRUE)
+rescaled = ((modER - errng[1]) /
+        (errng[2] - errng[1])) * (5 - 1) + 1
+
+plot(aq_metab_cov2$Stream_PAR_sum[aq_high_cov_bool],
+    aq_metab_cov2$Disch_ar1[aq_high_cov_bool], pch=21,
+    xlab='Light Availability (Mean Annual Surface PAR)',
+    ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
+    col=alpha(ercolor, alpha=0.5), bty='o', xlim=c(2, 15.5), ylim=c(0.1, 1),
+    # xpd=NA, main='', cex=log(aq_metab_cov$ER_aq_sum), font.lab=2)
+    xpd=NA, main='', cex=rescaled[aq_high_cov_bool], font.lab=2,
+    bg=alpha(ercolor, alpha=0.5))
+points(aq_metab_cov2$Stream_PAR_sum[! aq_high_cov_bool],
+    aq_metab_cov2$Disch_ar1[! aq_high_cov_bool], pch=21,
+    col=alpha(ercolor, alpha=0.5), bg='transparent', cex=rescaled[! aq_high_cov_bool])
+
+# legend('right', legend=c(round(errng[1], 2), '', '', round(errng[2], 0)),
+legend('right', legend=c(expression(paste(0.1)), '', '', expression(paste(3800))),
+    bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
+    pt.cex=c(1, 2, 3, 5), col='gray30', xpd=NA, y.intersp=c(1, 2, 1.2, 1.6),
+    inset=c(-0.16, 0), title='')
+legend('right', legend=c('','','',''),
+    bty='n', pch=21, pt.bg='transparent', x.intersp=1.5,
+    pt.cex=c(1, 2, 3, 5), col='transparent', xpd=NA,
+    inset=c(-0.15, 0), title=expression(paste(bold('Cumul.\nAnnual\nER'))))
+dev.off()
+
+
+
+# table of mean and quartiles by coverage for gpp and er ####
+
+eraqs = aq_metab_cov2$ER_aq_sum * -1
+
+subsets = rep(c(0, 60, 90), times=2)
+vars = c(rep('GPP', 3), rep('ER', 3))
+
+mean0gpp = mean(aq_metab_cov2$GPP_aq_sum)
+low0gpp = unname(quantile(aq_metab_cov2$GPP_aq_sum)[2])
+high0gpp = unname(quantile(aq_metab_cov2$GPP_aq_sum)[4])
+mean0er = mean(eraqs)
+low0er = unname(quantile(eraqs)[2])
+high0er = unname(quantile(eraqs)[4])
+
+mean90gpp = mean(aq_metab_cov2$GPP_aq_sum[aq_high_cov_bool])
+low90gpp = unname(quantile(aq_metab_cov2$GPP_aq_sum[aq_high_cov_bool])[2])
+high90gpp = unname(quantile(aq_metab_cov2$GPP_aq_sum[aq_high_cov_bool])[4])
+mean90er = mean(eraqs[aq_high_cov_bool])
+low90er = unname(quantile(eraqs[aq_high_cov_bool])[2])
+high90er = unname(quantile(eraqs[aq_high_cov_bool])[4])
+
+mean60gpp = mean(aq_metab_cov2$GPP_aq_sum[aq_high_cov_bool_60])
+low60gpp = unname(quantile(aq_metab_cov2$GPP_aq_sum[aq_high_cov_bool_60])[2])
+high60gpp = unname(quantile(aq_metab_cov2$GPP_aq_sum[aq_high_cov_bool_60])[4])
+mean60er = mean(eraqs[aq_high_cov_bool_60])
+low60er = unname(quantile(eraqs[aq_high_cov_bool_60])[2])
+high60er = unname(quantile(eraqs[aq_high_cov_bool_60])[4])
+
+ooo = tibble(filter_thresh=subsets, var=vars,
+    mean=c(mean0gpp, mean60gpp, mean90gpp, mean0er, mean60er, mean90er),
+    lowerq=c(low0gpp, low60gpp, low90gpp, low0er, low60er, low90er),
+    upperq=c(high0gpp, high60gpp, high90gpp, high0er, high60er, high90er))
+
+write.csv(ooo, 'output/final/metab_dists_by_coverage.csv', row.names=FALSE)
 
 # P:R vs stream order ####
 metr = left_join(metr, select(sites, sitecode, STREAMORDE))
