@@ -146,6 +146,20 @@ aq_metab_cov = magg %>%
         GPP_aq_sum=sum(GPP, na.rm=TRUE),
         ER_aq_sum=sum(ER, na.rm=TRUE)) %>%
     left_join(aq_cov)
+aq_metab_cov_forstats = magg %>%
+    select(sitecode, GPP=GPP_C_filled, ER=ER_C_filled, DOY) %>%
+    group_by(sitecode, DOY) %>%
+    summarize(GPP=mean(GPP, na.rm=TRUE),
+        ER=mean(ER, na.rm=TRUE)) %>%
+    ungroup() %>%
+    filter(! is.na(GPP) & ! is.na(ER)) %>%
+    group_by(sitecode) %>%
+    summarize(GPP_ann_mean=mean(GPP, na.rm=TRUE),
+        ER_ann_mean=mean(ER, na.rm=TRUE),
+        GPP_ann_sum=sum(GPP, na.rm=TRUE),
+        ER_ann_sum=sum(ER, na.rm=TRUE)) %>%
+    left_join(aq_cov) %>%
+    as_tibble()
 
 # magg = magg %>%
 #     select(sitecode, GPP, ER) %>%
@@ -2399,6 +2413,7 @@ write.csv(emdf, 'output/final/terr_aq_cumul_metab.csv', row.names=FALSE)
 # zzz$mean_daily_gpp_C = zzz$mean_daily_gpp_C * 365
 
 # rebuilds 20200717 ####
+
 #rebuilding some stuff here so that this section is a litte more self contained.
 #still gotta run all the 0-lines above for this to work
 
@@ -2410,7 +2425,7 @@ for(i in 1:length(filt)){
 zz = Reduce(bind_rows, filt)
 zz = as_tibble(zz)
 
-aq_metab_cov2 = select(aq_metab_cov, sitecode, GPP=GPP_aq_mean, ER=ER_aq_mean) %>%
+aq_metab_cov2 = select(aq_metab_cov, sitecode, GPP=GPP_aq_sum, ER=ER_aq_sum) %>%
     mutate(NEP = GPP + ER) %>%
     left_join(metr, by='sitecode')
 
@@ -2480,6 +2495,10 @@ bubble_plot = function(xvar, comp, logx=FALSE, outfile){
     pdf(outfile, height=8, width=8)
     par(mar=c(5, 5, 4, 6))
 
+    plotcol = case_when(comp == 'GPP' ~ gppcolor,
+                        comp == 'ER' ~ ercolor,
+                        comp == 'NEP' ~ 'black')
+
     if(xvar == 'Stream_PAR_sum'){
         xxlab = 'Light Availability (Mean Annual Surface PAR)'
     } else {
@@ -2487,23 +2506,35 @@ bubble_plot = function(xvar, comp, logx=FALSE, outfile){
     }
 
     gpprng = range(aq_metab_cov2$GPP, na.rm=TRUE)
-    xx = abs(aq_metab_cov2[[comp]])
-    rescaled = ((xx - gpprng[1]) /
-                    (gpprng[2] - gpprng[1])) * (5 - 1) + 1
+    if(comp == 'ER'){
+        xx = abs(aq_metab_cov2[[comp]])
+    } else {
+        xx = aq_metab_cov2[[comp]]
+    }
+    if(comp != 'NEP'){
+        rescaled = ((xx - gpprng[1]) /
+                        (gpprng[2] - gpprng[1])) * (5 - 1) + 1
+    } else {
+        xxrng = range(xx, na.rm=TRUE)
+        # rescaled = ((xx - xxrng[1]) /
+        #                 (xxrng[2] - xxrng[1])) * (3) + 0.2
+        rescaled = ((xx - -4000) /
+                        (2000 - -4000)) * (4) + 0.2
+    }
 
     xxvar = aq_metab_cov2[[xvar]]
     if(logx){
         xxvar = log(xxvar)
         if(xvar == 'Stream_PAR_sum'){
-            xlm =c(.6057, 2.747)
+            xlm = c(.6057, 2.747)
         } else {
-            xlm =range(xxvar, na.rm=TRUE)
+            xlm = c(5.309, 8.071)
         }
     } else {
         if(xvar == 'Stream_PAR_sum'){
             xlm = c(2, 15.5)
         } else {
-            xlm =range(xxvar, na.rm=TRUE)
+            xlm = range(xxvar, na.rm=TRUE)
         }
     }
 
@@ -2511,23 +2542,32 @@ bubble_plot = function(xvar, comp, logx=FALSE, outfile){
          aq_metab_cov2$Disch_ar1[aq_high_cov_bool], pch=21,
          xlab=xxlab, xaxt='n',
          ylab='Predictability of Flow (Discharge AR-1 Coeff.)',
-         col=alpha('darkgreen', alpha=0.5), bty='o', xlim=xlm,
+         col=alpha(plotcol, alpha=0.5), bty='o', xlim=xlm,
          ylim=c(0.1, 1),
          # xpd=NA, main='', cex=log(aq_metab_cov$GPP_aq_sum), font.lab=2)
          xpd=NA, main='', cex=rescaled[aq_high_cov_bool], font.lab=2,
-         bg=alpha('darkgreen', alpha=0.5))
+         bg=alpha(plotcol, alpha=0.5))
     points(xxvar[! aq_high_cov_bool],
            aq_metab_cov2$Disch_ar1[! aq_high_cov_bool], pch=21,
-           col=alpha('darkgreen', alpha=0.5), bg='transparent',
+           col=alpha(plotcol, alpha=0.5), bg='transparent',
            cex=rescaled[! aq_high_cov_bool])
 
     # legend('right', legend=c(round(rng[1], 2), '', '', round(rng[2], 0)),
-    legend('right', legend=c(expression(paste(0.01)), '', '',
-                             expression(paste(4000))),
-           bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
-           pt.cex=c(1, 2, 3, 5), col='gray30', xpd=NA,
-           y.intersp=c(1, 2, 1.2, 1.6),
-           inset=c(-0.16, 0), title='')
+    if(comp != 'NEP'){
+        legend('right', legend=c(expression(paste(0.01)), '', '',
+                                 expression(paste(4000))),
+               bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
+               pt.cex=c(1, 2, 3, 5), col='gray30', xpd=NA,
+               y.intersp=c(1, 2, 1.2, 1.6),
+               inset=c(-0.16, 0), title='')
+    } else {
+        legend('right', legend=c(expression(paste(-4000)), '', '',
+                                 expression(paste(2000))),
+               bty='n', pch=21, pt.bg='transparent', x.intersp=1.7,
+               pt.cex=seq(0.2, 4, length.out=4), col='gray30', xpd=NA,
+               y.intersp=c(1, 2, 1.2, 1.6),
+               inset=c(-0.18, 0), title='')
+    }
     if(comp == 'GPP'){
         legend('right', legend=c('','','',''),
                bty='n', pch=21, pt.bg='transparent', x.intersp=1.5,
@@ -2552,7 +2592,7 @@ bubble_plot = function(xvar, comp, logx=FALSE, outfile){
         if(xvar == 'Stream_PAR_sum'){
             tcks = c(1, 2, 4, 8, 16)
         } else {
-            tcks = c(1, 10, 100, 1000, 10000)
+            tcks = c(200, 400, 800, 1600, 3200)
         }
         tcks_log = log(tcks)
         axis(1, at=tcks_log, labels=tcks)
@@ -2594,7 +2634,15 @@ bubble_plot(xvar='MOD_ann_GPP', comp='ER', logx=TRUE, outfile='output/final/turb
 bubble_plot(xvar='MOD_ann_GPP', comp='NEP', logx=FALSE, outfile='output/final/turbofinal/MODGPP_NEP_linear.pdf')
 bubble_plot(xvar='MOD_ann_GPP', comp='NEP', logx=TRUE, outfile='output/final/turbofinal/MODGPP_NEP_log.pdf')
 
-#what's the deal with MODGPP? ####
-pdf('output/final/turbofinal/GPP_vs_MODGPP.pdf', height=4, width=4)
-plot(aq_metab_cov2$GPP, aq_metab_cov2$MOD_ann_GPP, xlab='stream GPP', ylab='MODIS GPP')
-dev.off()
+# dataset for bob ####
+
+sitesub = sites %>%
+    select(sitecode, lat=Lat, lon=Lon, area_km=TOTDASQKM)
+metr_sub = select(metr, sitecode, Disch_ar1, MOD_ann_GPP, Stream_PAR_sum)
+
+statset = aq_metab_cov_forstats %>%
+    left_join(metr_sub, by='sitecode') %>%
+    left_join(sitesub, by='sitecode')
+
+write.csv(statset, 'output/final/turbofinal/streampulse_synthesis_statset.csv',
+          row.names=FALSE)

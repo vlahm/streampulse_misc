@@ -5,3 +5,4 @@ neon_DO_evaluation/neonDO.csv
 /coupled_CO2-O2_toy_model
 *.png
 *.pdf
+.Rproj.user
