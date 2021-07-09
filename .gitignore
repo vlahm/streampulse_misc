@@ -6,3 +6,5 @@ neon_DO_evaluation/neonDO.csv
 *.png
 *.pdf
 .Rproj.user
+*.xml
+nwqp_ingest/site_files/
