@@ -1,14 +1,53 @@
 library(tidyverse)
 library(lubridate)
 library(streamMetabolizer)
+library(RMariaDB)
 
 setwd('~/git/streampulse/other_projects/nwqp_ingest/')
+
+#setup ####
+
+cur_time = Sys.time()
+attr(cur_time, 'tzone') = 'UTC'
+
+conf = read_lines('../../server_copy/sp/config.py')
+extract_from_config = function(key){
+    ind = which(lapply(conf, function(x) grepl(key, x)) == TRUE)
+    val = str_match(conf[ind], '.*\\"(.*)\\"')[2]
+    return(val)
+}
+
+#connect to mysql via mariadb
+pw = extract_from_config('MYSQL_PW')
+con = dbConnect(RMariaDB::MariaDB(),
+                dbname = 'sp',
+                username = 'root',
+                password = pw)
+
+# wrangle site data ####
 
 site_info = read_csv('Metabolism.site.info.csv') %>%
     mutate(STATE = c('IL', 'IN', 'IN', 'IA', 'CT', 'CT', 'CT', 'NY', 'NY', 'OR',
                      'OR', 'WA', 'WA', 'WA', 'GA', 'GA', 'GA', 'NC', 'NC', 'NC'),
-           SHORT_NAME = ifelse(SHORT_NAME == 'NFDeep', 'NFDeepCreek', SHORT_NAME))
+           SHORT_NAME = ifelse(SHORT_NAME == 'NFDeep', 'NFDeepCreek', SHORT_NAME),
+           addDate = cur_time,
+           embargo = 0,
+           by = -904,
+           datum = 'WGS84',
+           contact = 'https://doi.org/10.5066/P9YHB00S',
+           contactEmail = NA_character_) %>%
+    rename(region = STATE,
+           site = SHORT_NAME,
+           name = STATION_NM,
+           latitude = DEC_LAT,
+           longitude = DEC_LONG,
+           usgs = SITE_NO) %>%
+    select(region, site, name, latitude, longitude, datum, usgs, addDate, embargo,
+           by, contact, contactEmail)
 
+# harmonize input datasets ####
+
+#group data files by variant
 site_files = dir('site_files/')
 
 sites_type1 = site_files %>%
@@ -21,13 +60,12 @@ sites_type2 = site_files %>%
     .[, 2] %>%
     na.omit()
 
-# sites = c(sites_type1, sites_type2)
-
+#process type 1
 d1 = tibble()
 for(i in seq_along(sites_type1)){
 
     site = sites_type1[i]
-    this_site_info = site_info[site_info$SHORT_NAME == site, ]
+    this_site_info = site_info[site_info$site == site, ]
 
     input_file_ind = which(grepl(site, site_files) & grepl('input', site_files))
     d1 = read.csv(file.path('site_files', site_files[input_file_ind]),
@@ -36,7 +74,7 @@ for(i in seq_along(sites_type1)){
         mutate(DateTime_UTC = streamMetabolizer::convert_solartime_to_UTC(
             any.solar.time = as.POSIXct(solar.time,
                                         tz = 'UTC'),
-            longitude = site_info$DEC_LONG[site_info$SHORT_NAME == !!site])) %>%
+            longitude = site_info$longitude[site_info$site == !!site])) %>%
         select(-solar.time) %>%
         rename(DO_mgL = DO.obs,
                satDO_mgL = DO.sat,
@@ -55,11 +93,12 @@ for(i in seq_along(sites_type1)){
         bind_rows(d1)
 }
 
+#process type 2
 d2 = tibble()
 for(i in seq_along(sites_type2)){
 
     site = sites_type2[i]
-    this_site_info = site_info[site_info$SHORT_NAME == site, ]
+    this_site_info = site_info[site_info$site == site, ]
 
     input_file_ind = which(grepl(site, site_files) & grepl('input', site_files))
     d2 = read.csv(file.path('site_files', site_files[input_file_ind]),
@@ -86,9 +125,15 @@ for(i in seq_along(sites_type2)){
         bind_rows(d2)
 }
 
+d = bind_rows(d1, d2)
 
 
+# insert datasets into db ####
 
+dbWriteTable(con, 'nwqp', d, append = TRUE)
+dbWriteTable(con, 'site', site_info, append = TRUE)
+
+# a ####
 na.omit(str_match(dir('site_files'), 'metab_input_(.+)?.csv')[, 2])
 
 #why are some sites not included?
