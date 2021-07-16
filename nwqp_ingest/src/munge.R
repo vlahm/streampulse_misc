@@ -75,7 +75,7 @@ for(i in seq_along(sites_type1)){
             any.solar.time = as.POSIXct(solar.time,
                                         tz = 'UTC'),
             longitude = site_info$longitude[site_info$site == !!site])) %>%
-        select(-solar.time) %>%
+        select(-solar.time, -any_of('X')) %>%
         rename(DO_mgL = DO.obs,
                satDO_mgL = DO.sat,
                Depth_m = depth,
@@ -85,8 +85,8 @@ for(i in seq_along(sites_type1)){
                      names_to = 'variable',
                      values_to = 'value',
                      values_drop_na = TRUE) %>%
-        mutate(region = this_site_info$STATE,
-               site = this_site_info$SHORT_NAME,
+        mutate(region = this_site_info$region,
+               site = this_site_info$site,
                flag = NA_integer_,
                upload_id = -904) %>%
         select(region, site, DateTime_UTC, variable, value, flag, upload_id) %>%
@@ -117,8 +117,8 @@ for(i in seq_along(sites_type2)){
                      names_to = 'variable',
                      values_to = 'value',
                      values_drop_na = TRUE) %>%
-        mutate(region = this_site_info$STATE,
-               site = this_site_info$SHORT_NAME,
+        mutate(region = this_site_info$region,
+               site = this_site_info$site,
                flag = NA_integer_,
                upload_id = -904) %>%
         select(region, site, DateTime_UTC, variable, value, flag, upload_id) %>%
@@ -145,36 +145,52 @@ results_type2 = site_files %>%
     .[, 2] %>%
     na.omit()
 
+sm_out = list()
 for(i in seq_along(results_type1)){
 
     site = results_type1[i]
     this_site_info = site_info[site_info$site == site, ]
 
-    results_file_ind = which(grepl(site, site_files) & grepl('metab', site_files))
-    #HERE: D1 SHOULD MATCH zz$predictions (or some other element)
-    d1 = read.csv(file.path('site_files', site_files[results_file_ind]),
+    results_file_ind = which(grepl(site, site_files) & grepl('metab.+?\\.csv', site_files))
+    sm_out$predictions = read.csv(file.path('site_files',
+                                            site_files[results_file_ind]),
                   stringsAsFactors = FALSE) %>%
         as_tibble() %>%
-        mutate(DateTime_UTC = streamMetabolizer::convert_solartime_to_UTC(
-            any.solar.time = as.POSIXct(solar.time,
-                                        tz = 'UTC'),
-            longitude = site_info$longitude[site_info$site == !!site])) %>%
-        select(-solar.time) %>%
-        rename(DO_mgL = DO.obs,
-               satDO_mgL = DO.sat,
-               Depth_m = depth,
-               WaterTemp_C = temp.water,
-               Light_PAR = light) %>%
-        pivot_longer(cols = c(DO_mgL, satDO_mgL, Depth_m, WaterTemp_C, Light_PAR),
-                     names_to = 'variable',
-                     values_to = 'value',
-                     values_drop_na = TRUE) %>%
-        mutate(region = this_site_info$STATE,
-               site = this_site_info$SHORT_NAME,
-               flag = NA_integer_,
-               upload_id = -904) %>%
-        select(region, site, DateTime_UTC, variable, value, flag, upload_id) %>%
-        bind_rows(d1)
+        mutate(site_name = site,
+               # resolution = NA_integer_,
+               # GPP.n_eff = NA_real_,
+               # GPP.Rhat = NA_real_,
+               # ER.n_eff = NA_real_,
+               # ER.Rhat = NA_real_,
+               K600.lower = NA_real_,
+               K600.upper = NA_real_) %>%
+               # K600.n_eff = NA_real_,
+               # K600.Rhat = NA_real_,
+               # DO.obs = NA_real_,
+               # DO.sat = NA_real_,
+               # DO.amp = NA_real_,
+               # DO.psat = NA_real_,
+               # depth = NA_real_,
+               # temp.water = NA_real_,
+               # day.length = NA_real_,
+               # discharge = NA_real_,
+               # shortwave = NA_real_,
+               # velocity = NA_real_,
+               # DO.tdist80 = NA_real_) %>%
+        # select(site_name, resolution, date, GPP, GPP.lower, GPP.upper,
+        #        GPP.n_eff, GPP.Rhat, ER, ER.lower, ER.upper, ER.n_eff, ER.Rhat,
+        #        K600 = K600.fixed,
+        #        K600.lower, K600.upper, K600.n_eff, K600.Rhat, DO.obs,
+        #        DO.sat, DO.amp, DO.psat, depth, temp.water, day.length, discharge,
+        #        shortwave, velocity, DO.tdist80)
+        select(site_name, date, GPP, GPP.lower, GPP.upper, ER, ER.lower, ER.upper,
+               K600 = K600.fixed,
+               K600.lower, K600.upper)
+
+    sm_out$data = d %>%
+        select(solar.time, DO.obs, #HERE. SHOULD JUST RE-READ INPUT FILES.
+    zz = readRDS('../../../streampulse/server_copy/sp/shiny/model_viz/powell_data/shiny_lists/AK_15298040_2010.rds')
+    as_tibble(zz$data)
 }
 
 for(i in 1:length(powIn)){
