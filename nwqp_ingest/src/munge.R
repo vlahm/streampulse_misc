@@ -190,6 +190,7 @@ for(i in seq_along(results_type1)){
                   stringsAsFactors = FALSE) %>%
         as_tibble() %>%
         mutate(site_name = site,
+               date = as.Date(date),
                # resolution = NA_integer_,
                # GPP.n_eff = NA_real_,
                # GPP.Rhat = NA_real_,
@@ -245,8 +246,8 @@ for(i in seq_along(results_type1)){
                                          K600_daily_97.5pct = NA_real_,
                                          K600_daily_2.5pct = NA_real_,
                                          ER_daily_mean = sm_out$predictions$ER,
-                                         GPP_daily_mean = sm_out$predictions$GPP,
-                                         discharge.daily = NA_real_))
+                                         GPP_daily_mean = sm_out$predictions$GPP))
+                                         # discharge.daily = NA_real_))
 
     yr = unique(lubridate::year(d_list[[site]]$date))
     if(length(yr) > 1) stop('oi')
@@ -272,7 +273,8 @@ for(i in seq_along(results_type2)){
                                             site_files[results_file_ind]),
                   stringsAsFactors = FALSE) %>%
         as_tibble() %>%
-        mutate(site_name = site) %>%
+        mutate(site_name = site,
+               date = as.Date(date)) %>%
         select(site_name, date, GPP, GPP.lower, GPP.upper, ER, ER.lower, ER.upper,
                K600, K600.lower, K600.upper)
 
@@ -290,8 +292,8 @@ for(i in seq_along(results_type2)){
                                          K600_daily_97.5pct = sm_out$predictions$K600.upper,
                                          K600_daily_2.5pct = sm_out$predictions$K600.lower,
                                          ER_daily_mean = sm_out$predictions$ER,
-                                         GPP_daily_mean = sm_out$predictions$GPP,
-                                         discharge.daily = NA_real_))
+                                         GPP_daily_mean = sm_out$predictions$GPP))
+                                         # discharge.daily = NA_real_))
 
     yr = unique(lubridate::year(d_list[[site]]$date))
     if(length(yr) > 1) stop('oi')
